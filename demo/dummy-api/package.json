@@ -1,0 +1,7 @@
+{
+  "name": "dummy-api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Synthetic demo target for pub-project-auditor.",
+  "main": "index.js"
+}

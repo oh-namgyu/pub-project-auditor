@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pub-project-auditor</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+</head>
+<body>
+<header class="panel">
+  <h1>pub-project-auditor</h1>
+  <div class="status">
+    <span id="repos-pill" class="pill">loading…</span>
+    <button class="btn-primary" id="rescan-btn">Rescan</button>
+  </div>
+</header>
+
+<main class="grid">
+  <section class="card">
+    <h2>Run audit</h2>
+    <div class="row">
+      <label>Project
+        <select id="project-select"></select>
+      </label>
+    </div>
+    <div class="row tasks">
+      <label><input type="checkbox" value="review" checked> Review</label>
+      <label><input type="checkbox" value="security" checked> Security</label>
+    </div>
+    <button class="btn-primary" id="run-btn">Run</button>
+    <p class="muted" id="run-status"></p>
+  </section>
+
+  <section class="card">
+    <h2>Targets</h2>
+    <div class="targets-toolbar">
+      <span id="targets-summary" class="muted"></span>
+      <input type="text" id="targets-filter" placeholder="filter by name…">
+    </div>
+    <div id="targets-list" class="targets-list"></div>
+  </section>
+
+  <section class="card wide">
+    <h2>Reports</h2>
+    <div id="reports-tree"></div>
+  </section>
+</main>
+
+<div id="report-modal" class="modal hidden">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-shell">
+    <header class="modal-header">
+      <h2 id="modal-title">Report</h2>
+      <button class="btn-primary btn-secondary" data-close>Close (Esc)</button>
+    </header>
+    <article id="modal-content" class="modal-content markdown-body">
+      <p class="muted">Loading…</p>
+    </article>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
