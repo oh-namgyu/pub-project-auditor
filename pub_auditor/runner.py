@@ -24,12 +24,16 @@ def _resolve_bin(claude_bin: Optional[str]) -> Optional[str]:
     return found
 
 
+DEFAULT_TOOLS = "Read,Glob,Grep"
+
+
 def run(
     prompt: str,
     project_path: Path,
     claude_bin: Optional[str],
     model: str = "sonnet",
     timeout_sec: int = 1800,
+    tools: str = DEFAULT_TOOLS,
 ) -> RunResult:
     if not project_path.is_dir():
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
@@ -44,7 +48,7 @@ def run(
         "--output-format", "json",
         "--model", model,
         "--no-session-persistence",
-        "--tools", "Read,Glob,Grep,Bash",
+        "--tools", tools,
     ]
     try:
         proc = subprocess.run(

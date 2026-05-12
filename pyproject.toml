@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pub-project-auditor"
+version = "0.1.0"
+description = "Audit a directory of local Git repositories with Claude Code."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "pydantic>=2.5",
+  "python-dotenv>=1.0",
+]
+
+[project.scripts]
+pub-auditor = "pub_auditor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pub_auditor*"]
+exclude = ["demo*", "reports*", "config*"]

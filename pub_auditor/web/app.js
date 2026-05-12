@@ -9,8 +9,8 @@ async function api(url, opts) {
 
 async function loadHealth() {
   try {
-    const h = await api("/api/health");
-    $("#repos-pill").textContent = h.repos_dir;
+    await api("/api/health");
+    $("#repos-pill").textContent = "online";
     $("#repos-pill").className = "pill ok";
   } catch {
     $("#repos-pill").textContent = "offline";
@@ -23,7 +23,7 @@ async function loadTargets() {
   _targets = data.targets || [];
   const sel = $("#project-select");
   sel.innerHTML = "";
-  _targets.forEach((t) => {
+  _targets.filter((t) => t.enabled).forEach((t) => {
     const o = document.createElement("option");
     o.value = t.name;
     o.textContent = `${t.name} [${t.language}${t.has_git ? "" : ", no-git"}]`;
@@ -104,6 +104,7 @@ $("#targets-list").addEventListener("change", async (e) => {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ updates: { [name]: enabled } }),
   });
+  await loadTargets();
 });
 
 $("#run-btn").addEventListener("click", async () => {

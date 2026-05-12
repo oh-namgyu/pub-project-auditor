@@ -42,13 +42,41 @@ def _read_origin_url(project: Path) -> Optional[str]:
     return None
 
 
+def _extract_owner(remote_url: str) -> Optional[str]:
+    """Extract the owner segment from common Git remote URL shapes.
+
+    Supports:
+      git@github.com:owner/repo.git
+      https://github.com/owner/repo(.git)
+      ssh://git@host/owner/repo.git
+    Returns the lowercased owner, or None if it can't be parsed.
+    """
+    url = remote_url.strip()
+    if "@" in url and ":" in url and "://" not in url:
+        try:
+            tail = url.split(":", 1)[1]
+        except IndexError:
+            return None
+    else:
+        if "://" not in url:
+            return None
+        tail = url.split("://", 1)[1].split("/", 1)
+        if len(tail) < 2:
+            return None
+        tail = tail[1]
+    parts = [p for p in tail.split("/") if p]
+    if not parts:
+        return None
+    return parts[0].lower().removesuffix(".git")
+
+
 def _classify(remote_url: Optional[str], owners: tuple[str, ...]) -> Origin:
     if remote_url is None:
         return "local"
-    lowered = remote_url.lower()
-    if owners and any(o in lowered for o in owners):
-        return "owned_remote"
     if not owners:
+        return "owned_remote"
+    owner = _extract_owner(remote_url)
+    if owner and owner in owners:
         return "owned_remote"
     return "external"
 

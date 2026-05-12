@@ -20,20 +20,22 @@ TASK_MAP = {
 }
 
 
+class AuditRequest(BaseModel):
+    project: str
+    tasks: list[str]
+
+
+class ToggleRequest(BaseModel):
+    updates: dict[str, bool]
+
+
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="pub-project-auditor", version="0.1.0")
     web_dir = cfg.project_root / "pub_auditor" / "web"
 
-    class AuditRequest(BaseModel):
-        project: str
-        tasks: list[str]
-
-    class ToggleRequest(BaseModel):
-        updates: dict[str, bool]
-
     @app.get("/api/health")
     def health() -> dict:
-        return {"ok": True, "repos_dir": str(cfg.repos_dir)}
+        return {"ok": True}
 
     @app.get("/api/targets")
     def list_targets() -> dict:
@@ -61,6 +63,8 @@ def create_app(cfg: Config) -> FastAPI:
         target = next((t for t in data["targets"] if t["name"] == req.project), None)
         if not target:
             raise HTTPException(404, f"project not found: {req.project}")
+        if not target.get("enabled", True):
+            raise HTTPException(403, f"project is disabled: {req.project}")
         project_path = Path(target["path"])
         results = []
         for task in req.tasks:

@@ -8,7 +8,7 @@ the Markdown reports in a tiny web dashboard.
 
 Built on top of the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI.
 
-![status](https://img.shields.io/badge/python-3.10%2B-blue) ![status](https://img.shields.io/badge/license-MIT-green)
+![status](https://img.shields.io/badge/python-3.9%2B-blue) ![status](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -41,16 +41,16 @@ repo so you can decide what to revive, refactor, or delete.
 git clone https://github.com/YOUR-USERNAME/pub-project-auditor.git
 cd pub-project-auditor
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 
 cp .env.example .env
 # edit .env: set AUDITOR_REPOS_DIR to the absolute path of your repos folder
 
 # scan once to build config/targets.json
-python -m pub_auditor.cli scan
+pub-auditor scan
 
 # run one audit
-python -m pub_auditor.cli run review hello-cli
+pub-auditor run review hello-cli
 
 # or launch the dashboard
 python -m pub_auditor.server
@@ -63,15 +63,21 @@ The repo ships with a tiny `demo/` folder containing two synthetic projects so
 you can verify the wiring before pointing it at your real code:
 
 ```bash
-AUDITOR_REPOS_DIR=$(pwd)/demo python -m pub_auditor.cli scan
-AUDITOR_REPOS_DIR=$(pwd)/demo python -m pub_auditor.cli run review hello-cli
+AUDITOR_REPOS_DIR=$(pwd)/demo pub-auditor scan
+AUDITOR_REPOS_DIR=$(pwd)/demo pub-auditor run review hello-cli
 ```
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.9+
 - [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)
-  on `PATH` (or set `CLAUDE_BIN` in `.env`) and an authenticated session
+  installed on `PATH` (or set `CLAUDE_BIN` in `.env`)
+- **An authenticated Claude session.** Either:
+  - sign in with a Claude Pro / Max subscription via `claude login`, or
+  - set `ANTHROPIC_API_KEY` (pay-as-you-go via the Anthropic API).
+
+  Without one of these the CLI cannot call the model and every audit will fail
+  with an authentication error.
 
 ## Configuration
 
@@ -82,7 +88,7 @@ All configuration is via environment variables — see [`.env.example`](.env.exa
 | `AUDITOR_REPOS_DIR` | *(required)* | Absolute path to your repos folder |
 | `AUDITOR_OWNERS` | *(empty)* | Comma-separated owners; only repos whose `git remote origin` URL matches are kept. Empty = keep all local repos |
 | `AUDITOR_PORT` | `6020` | Dashboard port |
-| `AUDITOR_HOST` | `127.0.0.1` | Bind host (loopback by default) |
+| `AUDITOR_HOST` | `127.0.0.1` | Bind host (loopback by default). **Do not change to `0.0.0.0` on an untrusted network** — `/api/targets` exposes local file paths and remote URLs. |
 | `CLAUDE_BIN` | *(PATH lookup)* | Path to `claude` binary |
 | `AUDITOR_MODEL` | `sonnet` | Claude model |
 | `AUDITOR_TIMEOUT_SEC` | `1800` | Per-audit timeout |
@@ -102,8 +108,10 @@ The `--repos-dir` flag overrides `AUDITOR_REPOS_DIR` for one invocation.
 1. `scanner.py` walks `AUDITOR_REPOS_DIR`, classifies each subdirectory by its
    `git remote origin` (owned / external / no-git), and writes `config/targets.json`.
 2. Each task (`tasks/review.py`, `tasks/security.py`) prompts Claude Code in
-   the target repo's working directory with read-only tools, and stores the
-   Markdown result under `reports/<project>/<YYYY-MM-DD>-<task>.md`.
+   the target repo's working directory. By default Claude Code only gets
+   `Read,Glob,Grep` tools — no shell, no edits — so a malicious file in a
+   target repo cannot cause Claude to run arbitrary commands. The Markdown
+   result is saved to `reports/<project>/<YYYY-MM-DD>-<task>.md`.
 3. The FastAPI dashboard (`server.py`) renders the reports and lets you
    toggle, rescan, and re-run audits.
 
