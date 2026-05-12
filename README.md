@@ -10,6 +10,8 @@ Built on top of the [Claude Code](https://docs.claude.com/en/docs/claude-code/ov
 
 ![status](https://img.shields.io/badge/python-3.9%2B-blue) ![status](https://img.shields.io/badge/license-MIT-green)
 
+![dashboard](docs/screenshot.png)
+
 ---
 
 ## Why
