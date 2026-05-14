@@ -42,6 +42,8 @@ def run(
     if not binary:
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
                          error="claude binary not found on PATH (set CLAUDE_BIN or install Claude Code CLI)")
+    # automation-gateway-allow: public-release project — external users won't have
+    # the private automation-gateway gateway, so this must spawn claude directly.
     args = [
         binary,
         "-p", prompt,
