@@ -29,6 +29,8 @@ class Config:
     project_root: Path
     auth_token: Optional[str]
     max_concurrent: int
+    cost_usd_max: Optional[float]
+    tools: str
 
     @property
     def targets_path(self) -> Path:
@@ -73,6 +75,12 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
             "Either restore AUDITOR_HOST=127.0.0.1 or set AUDITOR_TOKEN to a long random secret."
         )
 
+    cost_max_raw = os.environ.get("AUDITOR_COST_USD_MAX", "").strip()
+    try:
+        cost_usd_max = float(cost_max_raw) if cost_max_raw else None
+    except ValueError:
+        raise ConfigError(f"AUDITOR_COST_USD_MAX must be a number; got {cost_max_raw!r}")
+
     return Config(
         repos_dir=repos_dir,
         owners=owners,
@@ -84,4 +92,6 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
         project_root=_project_root(),
         auth_token=auth_token,
         max_concurrent=max(1, int(os.environ.get("AUDITOR_MAX_CONCURRENT", "2"))),
+        cost_usd_max=cost_usd_max,
+        tools=os.environ.get("AUDITOR_TOOLS", "Read,Glob,Grep"),
     )

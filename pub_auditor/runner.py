@@ -26,6 +26,28 @@ def _resolve_bin(claude_bin: Optional[str]) -> Optional[str]:
 
 DEFAULT_TOOLS = "Read,Glob,Grep"
 
+# Environment variables passed to the claude subprocess. Anything outside
+# this allowlist is dropped — keeps unrelated app secrets in the operator's
+# shell from leaking upstream and shrinks the surface a hostile target-repo
+# prompt-injection can reach. Operators can extend via AUDITOR_ENV_PASSTHROUGH.
+_BASE_ENV_ALLOWLIST = frozenset({
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR",
+    "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES",
+    "TERM", "TERMINFO",
+})
+_ENV_PREFIX_ALLOWLIST = ("ANTHROPIC_", "CLAUDE_", "AWS_BEDROCK_", "GCP_VERTEX_")
+
+
+def _filtered_env() -> dict:
+    """Build the env dict for the claude subprocess from the allowlist."""
+    extra = {k.strip() for k in os.environ.get("AUDITOR_ENV_PASSTHROUGH", "").split(",") if k.strip()}
+    allowed_keys = _BASE_ENV_ALLOWLIST | extra
+    out: dict[str, str] = {}
+    for k, v in os.environ.items():
+        if k in allowed_keys or any(k.startswith(p) for p in _ENV_PREFIX_ALLOWLIST):
+            out[k] = v
+    return out
+
 
 def run(
     prompt: str,
@@ -58,7 +80,7 @@ def run(
     # SIGTERM it to implement cancellation.
     try:
         proc = subprocess.Popen(
-            args, cwd=str(project_path), env={**os.environ},
+            args, cwd=str(project_path), env=_filtered_env(),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
     except OSError as e:
