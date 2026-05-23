@@ -1,9 +1,12 @@
-"""Shared task utilities: report saving, outcome type."""
+"""Shared task utilities: report saving, outcome type, task runner."""
 from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import TYPE_CHECKING, Callable, Optional, TypedDict
+
+if TYPE_CHECKING:
+    from pub_auditor.config import Config
 
 
 class TaskOutcome(TypedDict):
@@ -32,3 +35,26 @@ def first_line(text: str) -> str:
         if s and not s.startswith("#") and not s.startswith("<!--"):
             return s[:200]
     return ""
+
+
+def run_task(
+    cfg: "Config",
+    project_path: Path,
+    project_name: str,
+    task_name: str,
+    prompt: str,
+    extract_summary: Optional[Callable[[str], str]] = None,
+) -> TaskOutcome:
+    from pub_auditor import runner  # local import keeps the task→runner edge one-way
+
+    result = runner.run(
+        prompt, project_path,
+        claude_bin=cfg.claude_bin, model=cfg.model, timeout_sec=cfg.timeout_sec,
+    )
+    if not result["success"]:
+        return TaskOutcome(success=False, report_path="", summary="",
+                           error=result["error"] or "unknown")
+    body = wrap_report(project_name, task_name, result["text"], result["cost_usd"], result["duration_ms"])
+    path = save_report(cfg.reports_dir, project_name, task_name, body)
+    summary = (extract_summary or first_line)(result["text"])
+    return TaskOutcome(success=True, report_path=str(path), summary=summary, error=None)

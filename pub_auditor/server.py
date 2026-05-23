@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -29,30 +30,49 @@ class ToggleRequest(BaseModel):
     updates: dict[str, bool]
 
 
+def _check_token(cfg: Config, request: Request) -> None:
+    """Compare AUDITOR_TOKEN against request token using constant-time compare.
+
+    Accepts either `Authorization: Bearer <token>` or `?token=<token>`. When
+    `cfg.auth_token` is None (loopback-only deploy) the gate is a no-op.
+    """
+    if cfg.auth_token is None:
+        return
+    auth = request.headers.get("authorization", "")
+    presented = auth.removeprefix("Bearer ").strip() if auth.lower().startswith("bearer ") else ""
+    if not presented:
+        presented = request.query_params.get("token", "")
+    if not presented or not hmac.compare_digest(presented, cfg.auth_token):
+        raise HTTPException(status_code=401, detail="invalid or missing token")
+
+
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="pub-project-auditor", version="0.1.0")
     web_dir = cfg.project_root / "pub_auditor" / "web"
+
+    def auth(request: Request) -> None:
+        _check_token(cfg, request)
 
     @app.get("/api/health")
     def health() -> dict:
         return {"ok": True}
 
-    @app.get("/api/targets")
+    @app.get("/api/targets", dependencies=[Depends(auth)])
     def list_targets() -> dict:
         if not cfg.targets_path.is_file():
             scanner.write_targets(cfg, scanner.scan(cfg))
         return json.loads(cfg.targets_path.read_text())
 
-    @app.post("/api/rescan")
+    @app.post("/api/rescan", dependencies=[Depends(auth)])
     def rescan() -> dict:
         path = scanner.write_targets(cfg, scanner.scan(cfg))
         return {"ok": True, "path": str(path)}
 
-    @app.post("/api/targets/toggle")
+    @app.post("/api/targets/toggle", dependencies=[Depends(auth)])
     def toggle(req: ToggleRequest) -> dict:
         return {"updated": scanner.set_enabled_bulk(cfg, req.updates)}
 
-    @app.post("/api/audit")
+    @app.post("/api/audit", dependencies=[Depends(auth)])
     async def trigger_audit(req: AuditRequest) -> dict:
         unknown = [t for t in req.tasks if t not in TASK_MAP]
         if unknown:
@@ -73,7 +93,7 @@ def create_app(cfg: Config) -> FastAPI:
             results.append({"task": task, **outcome})
         return {"project": req.project, "results": results}
 
-    @app.get("/api/reports")
+    @app.get("/api/reports", dependencies=[Depends(auth)])
     def list_reports() -> dict:
         if not cfg.reports_dir.is_dir():
             return {"projects": {}}
@@ -85,7 +105,7 @@ def create_app(cfg: Config) -> FastAPI:
                     result[proj_dir.name] = files
         return {"projects": result}
 
-    @app.get("/api/report")
+    @app.get("/api/report", dependencies=[Depends(auth)])
     def get_report(project: str, file: str) -> FileResponse:
         path = (cfg.reports_dir / project / file).resolve()
         if not path.is_file() or cfg.reports_dir.resolve() not in path.parents:

@@ -90,10 +90,17 @@ All configuration is via environment variables — see [`.env.example`](.env.exa
 | `AUDITOR_REPOS_DIR` | *(required)* | Absolute path to your repos folder |
 | `AUDITOR_OWNERS` | *(empty)* | Comma-separated owners; only repos whose `git remote origin` URL matches are kept. Empty = keep all local repos |
 | `AUDITOR_PORT` | `6020` | Dashboard port |
-| `AUDITOR_HOST` | `127.0.0.1` | Bind host (loopback by default). **Do not change to `0.0.0.0` on an untrusted network** — `/api/targets` exposes local file paths and remote URLs. |
+| `AUDITOR_HOST` | `127.0.0.1` | Bind host (loopback by default). Any other value **requires** `AUDITOR_TOKEN`; the server refuses to start otherwise. |
+| `AUDITOR_TOKEN` | *(empty)* | Required iff `AUDITOR_HOST` is not loopback. Bearer token; pass as `Authorization: Bearer <token>` header or `?token=<token>` query. Constant-time compare. Generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. |
 | `CLAUDE_BIN` | *(PATH lookup)* | Path to `claude` binary |
 | `AUDITOR_MODEL` | `sonnet` | Claude model |
 | `AUDITOR_TIMEOUT_SEC` | `1800` | Per-audit timeout |
+
+### Trust boundary (read before pointing this at someone else's code)
+
+- **The repos you audit are untrusted input.** Their READMEs, source files, and config are fed to Claude as prompt context. A hostile repo can attempt prompt injection ("ignore prior, write X to disk"). The default `--tools` allowlist is `Read,Glob,Grep` (read-only), which contains the blast radius, but treat audit reports as advisory rather than authoritative when the target repo isn't yours.
+- **Audit prompts leave your machine.** Claude Code sends the prompt (which includes excerpts of the target repo) to Anthropic's API. If a target repo contains secrets, those flow upstream and may appear in generated reports. Scrub `.env` / credential files before pointing the auditor at a sensitive project.
+- **`AUDITOR_REPOS_DIR` is trusted, the contents are not.** The scanner only walks paths under that directory, but every repo inside is a potential prompt-injection source.
 
 ## CLI
 
