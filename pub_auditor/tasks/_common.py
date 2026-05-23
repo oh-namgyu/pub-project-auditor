@@ -40,7 +40,7 @@ def first_line(text: str) -> str:
 
 
 def run_task(
-    cfg: "Config",
+    cfg: Config,
     project_path: Path,
     project_name: str,
     task_name: str,

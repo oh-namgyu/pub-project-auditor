@@ -24,6 +24,7 @@ def _isolated_env(monkeypatch):
 
 def _isolated_cfg(repos_dir: Path):
     from dataclasses import replace
+
     from pub_auditor.config import load
     cfg = load()
     isolated_root = repos_dir / "_proj"
@@ -81,6 +82,7 @@ def test_audit_log_path_loads_from_env(_isolated_env, tmp_path):
 
 def test_audit_log_written_after_job(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.server import create_app
 
     audit_log = tmp_path / "audit.log"

@@ -45,6 +45,7 @@ def _isolated_cfg(repos_dir: Path):
     tests don't poison the real config/targets.json. Also mirror the
     pub_auditor/web/ directory so StaticFiles can mount it."""
     from dataclasses import replace
+
     from pub_auditor.config import load
     cfg = load()
     isolated_root = repos_dir / "_proj"
@@ -69,6 +70,7 @@ def _wait_for_status(client, job_id: str, target: set[str], timeout: float = 5.0
 
 def test_audit_returns_job_id_and_completes(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.config import load  # noqa: F401
     from pub_auditor.server import create_app
 
@@ -96,6 +98,7 @@ def test_audit_returns_job_id_and_completes(_isolated_env, tmp_path, monkeypatch
 
 def test_audit_concurrency_cap(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.config import load  # noqa: F401
     from pub_auditor.server import create_app
 
@@ -134,6 +137,7 @@ def test_audit_cancel(_isolated_env, tmp_path, monkeypatch):
     """DELETE /api/audit/{id} on a multi-task job — second task should be
     skipped because cancel_event is checked between tasks."""
     from fastapi.testclient import TestClient
+
     from pub_auditor.server import create_app
 
     _isolated_env.setenv("AUDITOR_REPOS_DIR", str(tmp_path))
@@ -175,6 +179,7 @@ def test_audit_cancel(_isolated_env, tmp_path, monkeypatch):
 
 def test_cancel_unknown_job_returns_404(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.server import create_app
     _isolated_env.setenv("AUDITOR_REPOS_DIR", str(tmp_path))
     _seed_targets(tmp_path)
@@ -185,6 +190,7 @@ def test_cancel_unknown_job_returns_404(_isolated_env, tmp_path, monkeypatch):
 
 def test_get_unknown_job(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.config import load  # noqa: F401
     from pub_auditor.server import create_app
 
@@ -198,6 +204,7 @@ def test_get_unknown_job(_isolated_env, tmp_path, monkeypatch):
 
 def test_audit_unknown_task_rejected(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.config import load  # noqa: F401
     from pub_auditor.server import create_app
 

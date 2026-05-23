@@ -179,7 +179,7 @@ def create_app(cfg: Config) -> FastAPI:
         try:
             job = await store.create(req.project, req.tasks)
         except RuntimeError as e:
-            raise HTTPException(429, str(e))
+            raise HTTPException(429, str(e)) from e
 
         asyncio.create_task(_run_job(cfg, store, job, project_path))
         return {"job_id": job.id, "project": req.project, "tasks": req.tasks,

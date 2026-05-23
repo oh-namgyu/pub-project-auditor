@@ -81,8 +81,8 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
     cost_max_raw = os.environ.get("AUDITOR_COST_USD_MAX", "").strip()
     try:
         cost_usd_max = float(cost_max_raw) if cost_max_raw else None
-    except ValueError:
-        raise ConfigError(f"AUDITOR_COST_USD_MAX must be a number; got {cost_max_raw!r}")
+    except ValueError as e:
+        raise ConfigError(f"AUDITOR_COST_USD_MAX must be a number; got {cost_max_raw!r}") from e
 
     audit_log_raw = os.environ.get("AUDITOR_AUDIT_LOG_PATH", "").strip()
     audit_log_path = Path(audit_log_raw).expanduser().resolve() if audit_log_raw else None

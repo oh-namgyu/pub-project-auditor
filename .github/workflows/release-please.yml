@@ -1,0 +1,22 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # Each main push opens (or updates) a release PR collecting the
+          # conventional-commit messages since the last release; merging the
+          # PR cuts a new tag, bumps the version in pyproject.toml +
+          # CHANGELOG.md, and publishes a GitHub Release.
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

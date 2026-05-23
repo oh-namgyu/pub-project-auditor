@@ -18,3 +18,8 @@ reports/
 .idea/
 .vscode/
 *.log
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+.pytest_cache/
