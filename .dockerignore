@@ -21,6 +21,5 @@ reports
 .env
 .env.local
 .DS_Store
-README.md
 SECURITY.md
 CHANGELOG.md
