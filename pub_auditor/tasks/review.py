@@ -3,9 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pub_auditor import runner
 from pub_auditor.config import Config
-from pub_auditor.tasks._common import TaskOutcome, first_line, save_report, wrap_report
+from pub_auditor.tasks._common import TaskOutcome, run_task
 
 PROMPT = """\
 You are auditing the project in the current working directory.
@@ -41,14 +40,4 @@ Rules:
 
 
 def run_review(cfg: Config, project_path: Path, project_name: str) -> TaskOutcome:
-    result = runner.run(
-        PROMPT, project_path,
-        claude_bin=cfg.claude_bin, model=cfg.model, timeout_sec=cfg.timeout_sec,
-    )
-    if not result["success"]:
-        return TaskOutcome(success=False, report_path="", summary="",
-                           error=result["error"] or "unknown error")
-    body = wrap_report(project_name, "review", result["text"], result["cost_usd"], result["duration_ms"])
-    path = save_report(cfg.reports_dir, project_name, "review", body)
-    return TaskOutcome(success=True, report_path=str(path),
-                       summary=first_line(result["text"]), error=None)
+    return run_task(cfg, project_path, project_name, "review", PROMPT)
