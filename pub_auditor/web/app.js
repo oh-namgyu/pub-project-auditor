@@ -107,26 +107,79 @@ $("#targets-list").addEventListener("change", async (e) => {
   await loadTargets();
 });
 
+// Current running job (one at a time from this UI). Held so Cancel works.
+let _currentJob = null;
+let _currentSource = null;
+
+function _cancelCurrentJob() {
+  if (!_currentJob) return;
+  fetch(`/api/audit/${encodeURIComponent(_currentJob)}`, { method: "DELETE" })
+    .catch(() => {});
+}
+
 $("#run-btn").addEventListener("click", async () => {
   const project = $("#project-select").value;
   const tasks = [...document.querySelectorAll(".tasks input:checked")].map((i) => i.value);
   if (!project || !tasks.length) return;
   const btn = $("#run-btn");
+  const cancelBtn = $("#cancel-btn");
   btn.disabled = true;
-  $("#run-status").textContent = `Running ${tasks.join(", ")} on ${project}…`;
+  $("#run-status").textContent = `Queuing ${tasks.join(", ")} on ${project}…`;
+
+  let job;
   try {
-    const r = await api("/api/audit", {
+    job = await api("/api/audit", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project, tasks }),
     });
-    const ok = r.results.filter((x) => x.success).length;
-    $("#run-status").textContent = `Done: ${ok}/${r.results.length} succeeded.`;
-    await loadReports();
   } catch (e) {
     $("#run-status").textContent = `Error: ${e.message}`;
-  } finally {
     btn.disabled = false;
+    return;
   }
+
+  _currentJob = job.job_id;
+  if (cancelBtn) cancelBtn.hidden = false;
+  $("#run-status").textContent = `Started job ${job.job_id} — listening for progress…`;
+
+  // SSE auth uses query token (EventSource can't set Authorization headers).
+  // Falls back to no token in loopback mode.
+  const t = new URL(location.href).searchParams.get("token") || "";
+  const src = new EventSource(`/api/audit/${encodeURIComponent(job.job_id)}/events?token=${encodeURIComponent(t)}`);
+  _currentSource = src;
+
+  src.onmessage = (m) => {
+    let ev;
+    try { ev = JSON.parse(m.data); } catch { return; }
+    const done = (ev.tasks || []).filter((x) => x.status === "done").length;
+    const total = (ev.tasks || []).length;
+    if (ev.type === "task_started") {
+      $("#run-status").textContent = `Running ${ev.task} (${done}/${total} done)…`;
+    } else if (ev.type === "task_done") {
+      $("#run-status").textContent = `${ev.task} → ${ev.tasks.find((x) => x.task === ev.task)?.status}; ${done}/${total} done`;
+    } else if (ev.type === "job_ended" || ev.status === "done" || ev.status === "cancelled" || ev.status === "failed") {
+      const ok = (ev.tasks || []).filter((x) => x.status === "done").length;
+      $("#run-status").textContent = `Job ${ev.status}: ${ok}/${(ev.tasks || []).length} succeeded.`;
+      src.close();
+      _currentSource = null;
+      _currentJob = null;
+      if (cancelBtn) cancelBtn.hidden = true;
+      btn.disabled = false;
+      loadReports();
+    }
+  };
+  src.onerror = () => {
+    src.close();
+    _currentSource = null;
+    _currentJob = null;
+    if (cancelBtn) cancelBtn.hidden = true;
+    btn.disabled = false;
+    $("#run-status").textContent += " (event stream closed)";
+  };
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "cancel-btn") _cancelCurrentJob();
 });
 
 document.addEventListener("click", (e) => {

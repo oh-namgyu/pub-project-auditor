@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import Callable, Optional, TypedDict
 
 
 class RunResult(TypedDict):
@@ -34,6 +34,7 @@ def run(
     model: str = "sonnet",
     timeout_sec: int = 1800,
     tools: str = DEFAULT_TOOLS,
+    on_proc_start: Optional[Callable[[subprocess.Popen], None]] = None,
 ) -> RunResult:
     if not project_path.is_dir():
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
@@ -52,18 +53,39 @@ def run(
         "--no-session-persistence",
         "--tools", tools,
     ]
+    # Popen + communicate(timeout=) instead of subprocess.run so a caller
+    # (the job queue) can grab the Popen handle via on_proc_start and
+    # SIGTERM it to implement cancellation.
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             args, cwd=str(project_path), env={**os.environ},
-            capture_output=True, text=True, timeout=timeout_sec,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
+    except OSError as e:
+        return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
+                         error=f"failed to spawn claude: {e}")
+    if on_proc_start is not None:
+        try:
+            on_proc_start(proc)
+        except Exception:
+            pass
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_sec)
     except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
                          error=f"timeout after {timeout_sec}s")
     if proc.returncode != 0:
-        return RunResult(success=False, text=proc.stdout or "", cost_usd=None, duration_ms=None,
-                         error=f"exit={proc.returncode} stderr={proc.stderr[:500]}")
-    return _parse(proc.stdout)
+        # SIGTERM from a cancel exits with negative returncode on POSIX,
+        # 130 on SIGINT. Map both to a clear "cancelled" error so the UI
+        # can show "cancelled by user" instead of a confusing exit code.
+        if proc.returncode < 0 or proc.returncode == 130:
+            return RunResult(success=False, text=stdout or "", cost_usd=None, duration_ms=None,
+                             error="cancelled")
+        return RunResult(success=False, text=stdout or "", cost_usd=None, duration_ms=None,
+                         error=f"exit={proc.returncode} stderr={(stderr or '')[:500]}")
+    return _parse(stdout)
 
 
 def _parse(stdout: str) -> RunResult:

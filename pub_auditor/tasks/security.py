@@ -41,8 +41,10 @@ Rules:
 """
 
 
-def run_security(cfg: Config, project_path: Path, project_name: str) -> TaskOutcome:
-    return run_task(cfg, project_path, project_name, "security", PROMPT, _first_finding)
+def run_security(cfg: Config, project_path: Path, project_name: str,
+                 on_proc_start=None) -> TaskOutcome:
+    return run_task(cfg, project_path, project_name, "security", PROMPT, _first_finding,
+                    on_proc_start=on_proc_start)
 
 
 def _first_finding(text: str) -> str:
