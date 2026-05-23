@@ -1,0 +1,33 @@
+# Minimal compose for running pub-project-auditor against a directory of
+# your local Git repos. `docker compose up` brings the dashboard up on
+# http://127.0.0.1:6020 and persists the JSONL audit trail to ./data.
+
+services:
+  pub-auditor:
+    build:
+      context: .
+      args:
+        CLAUDE_CODE_VERSION: latest
+    image: ghcr.io/oh-namgyu/pub-project-auditor:latest
+    container_name: pub-auditor
+    restart: unless-stopped
+    # Loopback by default. To expose on the network, change to
+    # "6020:6020" AND set AUDITOR_TOKEN to a long random secret.
+    ports:
+      - "127.0.0.1:6020:6020"
+    environment:
+      AUDITOR_REPOS_DIR: /work
+      AUDITOR_HOST: 0.0.0.0
+      AUDITOR_PORT: 6020
+      AUDITOR_AUDIT_LOG_PATH: /data/audit.log
+      # Required when not on loopback. Generate with:
+      #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+      # AUDITOR_TOKEN: ${AUDITOR_TOKEN:-}
+      # AUDITOR_MAX_CONCURRENT: "2"
+      # AUDITOR_COST_USD_MAX: "1.00"
+      # Anthropic credentials. Either ANTHROPIC_API_KEY here or sign in
+      # with `docker exec -it pub-auditor claude login` once.
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./work:/work
+      - ./data:/data
