@@ -4,6 +4,10 @@ All notable changes to pub-project-auditor.
 
 ## Unreleased — 2026-05-23
 
+### Observability & extension
+- **JSONL audit log.** `AUDITOR_AUDIT_LOG_PATH` activates an append-only log file with one record per completed job (`ts`, `job_id`, `project`, `status`, `started_at`, `ended_at`, `cost_usd`, per-task outcomes, `error`). No-op when unset.
+- **Claude sandbox wrapper.** `AUDITOR_CLAUDE_WRAPPER` (shlex-split) prepends arbitrary tokens to the claude argv — e.g. `nsjail -Mo --chroot /sandbox --` or `firejail --noprofile --net=none`. Operator owns wrapper correctness.
+
 ### Security
 - **`AUDITOR_TOKEN` auth gate.** Any non-loopback `AUDITOR_HOST` (anything other than `127.0.0.1` / `::1` / `localhost`) now requires `AUDITOR_TOKEN` and the server refuses to start otherwise. Previously a `0.0.0.0` bind exposed `/api/audit` to the network with no auth at all — anyone reachable could trigger claude spawns on the configured paths.
 - **Bearer token on protected endpoints.** `/api/targets`, `/api/rescan`, `/api/targets/toggle`, `/api/audit*`, `/api/reports`, `/api/report` accept either `Authorization: Bearer <token>` or `?token=<token>`, compared with `hmac.compare_digest`. Loopback default with no token configured stays open for backward compat.

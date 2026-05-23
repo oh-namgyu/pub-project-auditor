@@ -54,6 +54,7 @@ def run_task(
         prompt, project_path,
         claude_bin=cfg.claude_bin, model=cfg.model, timeout_sec=cfg.timeout_sec,
         tools=cfg.tools, on_proc_start=on_proc_start,
+        wrapper=cfg.claude_wrapper,
     )
     if not result["success"]:
         return TaskOutcome(success=False, report_path="", summary="",

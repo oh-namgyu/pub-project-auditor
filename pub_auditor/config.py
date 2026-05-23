@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -31,6 +32,8 @@ class Config:
     max_concurrent: int
     cost_usd_max: Optional[float]
     tools: str
+    audit_log_path: Optional[Path]
+    claude_wrapper: tuple[str, ...]
 
     @property
     def targets_path(self) -> Path:
@@ -81,6 +84,14 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
     except ValueError:
         raise ConfigError(f"AUDITOR_COST_USD_MAX must be a number; got {cost_max_raw!r}")
 
+    audit_log_raw = os.environ.get("AUDITOR_AUDIT_LOG_PATH", "").strip()
+    audit_log_path = Path(audit_log_raw).expanduser().resolve() if audit_log_raw else None
+
+    wrapper_raw = os.environ.get("AUDITOR_CLAUDE_WRAPPER", "").strip()
+    # shlex preserves quoted args ("--chroot=/sandbox dir with spaces") while
+    # still splitting on whitespace — safer than a naive str.split.
+    claude_wrapper = tuple(shlex.split(wrapper_raw)) if wrapper_raw else ()
+
     return Config(
         repos_dir=repos_dir,
         owners=owners,
@@ -94,4 +105,6 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
         max_concurrent=max(1, int(os.environ.get("AUDITOR_MAX_CONCURRENT", "2"))),
         cost_usd_max=cost_usd_max,
         tools=os.environ.get("AUDITOR_TOOLS", "Read,Glob,Grep"),
+        audit_log_path=audit_log_path,
+        claude_wrapper=claude_wrapper,
     )
