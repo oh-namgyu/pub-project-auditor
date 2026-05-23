@@ -44,12 +44,14 @@ def run_task(
     task_name: str,
     prompt: str,
     extract_summary: Optional[Callable[[str], str]] = None,
+    on_proc_start: Optional[Callable] = None,
 ) -> TaskOutcome:
     from pub_auditor import runner  # local import keeps the task→runner edge one-way
 
     result = runner.run(
         prompt, project_path,
         claude_bin=cfg.claude_bin, model=cfg.model, timeout_sec=cfg.timeout_sec,
+        on_proc_start=on_proc_start,
     )
     if not result["success"]:
         return TaskOutcome(success=False, report_path="", summary="",

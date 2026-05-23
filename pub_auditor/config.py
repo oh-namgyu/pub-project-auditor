@@ -28,6 +28,7 @@ class Config:
     timeout_sec: int
     project_root: Path
     auth_token: Optional[str]
+    max_concurrent: int
 
     @property
     def targets_path(self) -> Path:
@@ -82,4 +83,5 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
         timeout_sec=int(os.environ.get("AUDITOR_TIMEOUT_SEC", "1800")),
         project_root=_project_root(),
         auth_token=auth_token,
+        max_concurrent=max(1, int(os.environ.get("AUDITOR_MAX_CONCURRENT", "2"))),
     )

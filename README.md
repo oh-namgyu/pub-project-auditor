@@ -95,6 +95,7 @@ All configuration is via environment variables — see [`.env.example`](.env.exa
 | `CLAUDE_BIN` | *(PATH lookup)* | Path to `claude` binary |
 | `AUDITOR_MODEL` | `sonnet` | Claude model |
 | `AUDITOR_TIMEOUT_SEC` | `1800` | Per-audit timeout |
+| `AUDITOR_MAX_CONCURRENT` | `2` | Max active jobs (queued + running). `POST /api/audit` past this returns 429 |
 
 ### Trust boundary (read before pointing this at someone else's code)
 
@@ -111,6 +112,24 @@ pub-auditor run security <project>  # run security audit
 ```
 
 The `--repos-dir` flag overrides `AUDITOR_REPOS_DIR` for one invocation.
+
+## Web API
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /api/health` | open | health + active job count |
+| `GET /api/targets` | token | current scan output |
+| `POST /api/rescan` | token | re-run scanner |
+| `POST /api/targets/toggle` | token | enable/disable bulk |
+| `POST /api/audit` | token | enqueue job → returns `{job_id, status: "queued"}` |
+| `GET /api/audit/{job_id}` | token | snapshot of one job |
+| `DELETE /api/audit/{job_id}` | token | cancel (SIGTERMs the running claude proc) |
+| `GET /api/audit/{job_id}/events` | token (`?token=`) | SSE stream of `job_started`/`task_started`/`task_done`/`job_ended` |
+| `GET /api/audits` | token | list all jobs |
+| `GET /api/reports` | token | list saved reports |
+| `GET /api/report?project=&file=` | token | one report body |
+
+`POST /api/audit` past `AUDITOR_MAX_CONCURRENT` returns 429. Cancelled jobs end with `status: "cancelled"`; the underlying claude subprocess receives SIGTERM the moment cancel is called.
 
 ## How it works
 

@@ -39,5 +39,7 @@ Rules:
 """
 
 
-def run_review(cfg: Config, project_path: Path, project_name: str) -> TaskOutcome:
-    return run_task(cfg, project_path, project_name, "review", PROMPT)
+def run_review(cfg: Config, project_path: Path, project_name: str,
+               on_proc_start=None) -> TaskOutcome:
+    return run_task(cfg, project_path, project_name, "review", PROMPT,
+                    on_proc_start=on_proc_start)

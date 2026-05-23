@@ -4,15 +4,17 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from pub_auditor import scanner
 from pub_auditor.config import Config, ConfigError, load
+from pub_auditor.jobs import Job, JobStore
 from pub_auditor.tasks import review, security
 
 TASK_MAP = {
@@ -28,6 +30,65 @@ class AuditRequest(BaseModel):
 
 class ToggleRequest(BaseModel):
     updates: dict[str, bool]
+
+
+async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -> None:
+    """Worker coroutine for one job. Runs each task in a thread, emits SSE
+    events to subscribed listeners, respects the cancel_event between tasks
+    and propagates it into the running claude subprocess via on_proc_start."""
+    loop = asyncio.get_running_loop()
+    job.status = "running"
+    job.started_at = time.time()
+    await store.broadcast(job, {"type": "job_started", **job.snapshot()})
+
+    try:
+        for tr in job.tasks:
+            if job.cancel_event.is_set():
+                tr.status = "cancelled"
+                continue
+            tr.status = "running"
+            tr.started_at = time.time()
+            await store.broadcast(job, {"type": "task_started", "task": tr.task, **job.snapshot()})
+
+            fn = TASK_MAP[tr.task]
+
+            def on_proc_start(proc) -> None:
+                job.proc = proc
+                if job.cancel_event.is_set():
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+
+            outcome = await asyncio.to_thread(fn, cfg, project_path, job.project, on_proc_start)
+            job.proc = None
+            tr.outcome = dict(outcome)
+            tr.ended_at = time.time()
+            if outcome.get("success"):
+                tr.status = "done"
+            elif outcome.get("error") == "cancelled":
+                tr.status = "cancelled"
+            else:
+                tr.status = "failed"
+            await store.broadcast(job, {"type": "task_done", "task": tr.task, **job.snapshot()})
+
+        if job.cancel_event.is_set() and any(t.status == "cancelled" for t in job.tasks):
+            job.status = "cancelled"
+        elif all(t.status == "done" for t in job.tasks):
+            job.status = "done"
+        elif any(t.status == "failed" for t in job.tasks):
+            job.status = "failed"
+            job.error = "one or more tasks failed; see per-task outcome"
+        else:
+            job.status = "cancelled"
+    except Exception as e:
+        job.status = "failed"
+        job.error = f"unexpected: {e}"
+    finally:
+        job.ended_at = time.time()
+        await store.broadcast(job, {"type": "job_ended", **job.snapshot()})
+        # Signal end-of-stream so SSE listeners can close cleanly.
+        await store.broadcast(job, {"type": "__close__"})
 
 
 def _check_token(cfg: Config, request: Request) -> None:
@@ -49,13 +110,16 @@ def _check_token(cfg: Config, request: Request) -> None:
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="pub-project-auditor", version="0.1.0")
     web_dir = cfg.project_root / "pub_auditor" / "web"
+    store = JobStore(max_concurrent=cfg.max_concurrent)
+    app.state.job_store = store
 
     def auth(request: Request) -> None:
         _check_token(cfg, request)
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"ok": True}
+        return {"ok": True, "active_jobs": store.active_count(),
+                "max_concurrent": cfg.max_concurrent}
 
     @app.get("/api/targets", dependencies=[Depends(auth)])
     def list_targets() -> dict:
@@ -74,9 +138,13 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/api/audit", dependencies=[Depends(auth)])
     async def trigger_audit(req: AuditRequest) -> dict:
+        """Enqueue an audit job. Returns 202 + job_id; subscribe to
+        /api/audit/events/{id} for progress, DELETE /api/audit/{id} to cancel."""
         unknown = [t for t in req.tasks if t not in TASK_MAP]
         if unknown:
             raise HTTPException(400, f"unknown tasks: {unknown}")
+        if not req.tasks:
+            raise HTTPException(400, "tasks must be non-empty")
         if not cfg.targets_path.is_file():
             scanner.write_targets(cfg, scanner.scan(cfg))
         data = json.loads(cfg.targets_path.read_text())
@@ -85,13 +153,65 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(404, f"project not found: {req.project}")
         if not target.get("enabled", True):
             raise HTTPException(403, f"project is disabled: {req.project}")
+
         project_path = Path(target["path"])
-        results = []
-        for task in req.tasks:
-            fn = TASK_MAP[task]
-            outcome = await asyncio.to_thread(fn, cfg, project_path, req.project)
-            results.append({"task": task, **outcome})
-        return {"project": req.project, "results": results}
+        try:
+            job = await store.create(req.project, req.tasks)
+        except RuntimeError as e:
+            raise HTTPException(429, str(e))
+
+        asyncio.create_task(_run_job(cfg, store, job, project_path))
+        return {"job_id": job.id, "project": req.project, "tasks": req.tasks,
+                "status": job.status}
+
+    @app.get("/api/audit/{job_id}", dependencies=[Depends(auth)])
+    def get_job(job_id: str) -> dict:
+        job = store.get(job_id)
+        if job is None:
+            raise HTTPException(404, "job not found")
+        return job.snapshot()
+
+    @app.delete("/api/audit/{job_id}", dependencies=[Depends(auth)])
+    def cancel_job(job_id: str) -> dict:
+        if not store.cancel(job_id):
+            raise HTTPException(404, "job not found or already finished")
+        return {"ok": True, "job_id": job_id, "status": "cancelling"}
+
+    @app.get("/api/audit/{job_id}/events")
+    async def job_events(job_id: str, request: Request, token: str = "") -> StreamingResponse:
+        """SSE stream of job events. Token comes from ?token= query string
+        rather than Authorization header because EventSource API can't set
+        headers. Same constant-time compare as the rest of the gate."""
+        _check_token(cfg, request)
+        job = store.get(job_id)
+        if job is None:
+            raise HTTPException(404, "job not found")
+
+        async def gen():
+            q = store.subscribe(job)
+            try:
+                # Initial snapshot so a late subscriber sees current state.
+                yield f"data: {json.dumps({'type': 'snapshot', **job.snapshot()})}\n\n"
+                while True:
+                    try:
+                        event = await asyncio.wait_for(q.get(), timeout=25.0)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    if event.get("type") == "__close__":
+                        break
+                    yield f"data: {json.dumps(event)}\n\n"
+            finally:
+                store.unsubscribe(job, q)
+
+        return StreamingResponse(gen(), media_type="text/event-stream",
+                                 headers={"X-Accel-Buffering": "no",
+                                          "Cache-Control": "no-cache"})
+
+    @app.get("/api/audits", dependencies=[Depends(auth)])
+    def list_jobs() -> dict:
+        return {"jobs": [j.snapshot() for j in sorted(store.all(),
+                                                       key=lambda j: -j.created_at)]}
 
     @app.get("/api/reports", dependencies=[Depends(auth)])
     def list_reports() -> dict:
