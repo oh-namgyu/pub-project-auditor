@@ -17,7 +17,7 @@ import asyncio
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional  # noqa: F401
 
 
 @dataclass
@@ -63,10 +63,18 @@ class Job:
 
 
 class JobStore:
-    def __init__(self, max_concurrent: int = 2):
+    def __init__(self, max_concurrent: int = 2, ttl_seconds: int = 24 * 3600):
         self._jobs: dict[str, Job] = {}
         self._max_concurrent = max_concurrent
-        self._lock = asyncio.Lock()
+        self._ttl_seconds = ttl_seconds
+        # Lazily created so JobStore can be instantiated outside a running
+        # event loop (e.g. in tests that drive it synchronously).
+        self._lock: Optional[asyncio.Lock] = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def get(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
@@ -77,8 +85,26 @@ class JobStore:
     def active_count(self) -> int:
         return sum(1 for j in self._jobs.values() if j.status in ("queued", "running"))
 
+    def _is_expired(self, job: Job, now: float) -> bool:
+        if job.status in ("queued", "running"):
+            return False
+        anchor = job.ended_at or job.created_at
+        return (now - anchor) > self._ttl_seconds
+
+    def sweep(self) -> int:
+        """Drop terminal jobs older than ttl_seconds. Returns count removed.
+        Called lazily by list() / create() so we never need a background task."""
+        now = time.time()
+        expired = [jid for jid, j in self._jobs.items() if self._is_expired(j, now)]
+        for jid in expired:
+            del self._jobs[jid]
+        return len(expired)
+
     async def create(self, project: str, tasks: list[str]) -> Job:
-        async with self._lock:
+        async with self._get_lock():
+            # Drop expired jobs first so a creator who's been idle for a day
+            # doesn't see ghost entries against the concurrency cap.
+            self.sweep()
             if self.active_count() >= self._max_concurrent:
                 raise RuntimeError(
                     f"max concurrent jobs reached ({self._max_concurrent}); "

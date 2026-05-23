@@ -131,7 +131,7 @@ def _check_token(cfg: Config, request: Request) -> None:
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="pub-project-auditor", version="0.1.0")
     web_dir = cfg.project_root / "pub_auditor" / "web"
-    store = JobStore(max_concurrent=cfg.max_concurrent)
+    store = JobStore(max_concurrent=cfg.max_concurrent, ttl_seconds=cfg.job_ttl_seconds)
     app.state.job_store = store
 
     def auth(request: Request) -> None:
@@ -230,9 +230,20 @@ def create_app(cfg: Config) -> FastAPI:
                                           "Cache-Control": "no-cache"})
 
     @app.get("/api/audits", dependencies=[Depends(auth)])
-    def list_jobs() -> dict:
-        return {"jobs": [j.snapshot() for j in sorted(store.all(),
-                                                       key=lambda j: -j.created_at)]}
+    def list_jobs(limit: int = 50, offset: int = 0) -> dict:
+        """Paginated job list. Newest first. Limit clamped to [1, 200]."""
+        store.sweep()
+        limit = max(1, min(200, limit))
+        offset = max(0, offset)
+        all_sorted = sorted(store.all(), key=lambda j: -j.created_at)
+        page = all_sorted[offset : offset + limit]
+        return {
+            "jobs": [j.snapshot() for j in page],
+            "total": len(all_sorted),
+            "limit": limit,
+            "offset": offset,
+            "ttl_seconds": cfg.job_ttl_seconds,
+        }
 
     @app.get("/api/reports", dependencies=[Depends(auth)])
     def list_reports() -> dict:

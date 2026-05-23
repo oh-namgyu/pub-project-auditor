@@ -111,6 +111,9 @@ All configuration is via environment variables — see [`.env.example`](.env.exa
 | `AUDITOR_TOOLS` | `Read,Glob,Grep` | Comma-separated tools passed to claude `--tools`. Default is read-only |
 | `AUDITOR_ENV_PASSTHROUGH` | *(empty)* | Extra env var names forwarded to the claude subprocess. Base allowlist already covers `PATH`/`HOME`/`USER`/`LANG`/`LC_*`/`TERM` plus prefixes `ANTHROPIC_`, `CLAUDE_`, `AWS_BEDROCK_`, `GCP_VERTEX_` |
 | `AUDITOR_AUDIT_LOG_PATH` | *(unset)* | Append-only JSONL log of every completed job — `{ts, job_id, project, status, cost_usd, error, …}`. Useful for billing / forensics |
+| `AUDITOR_AUDIT_LOG_MAX_BYTES` | `10485760` | Rotation threshold (10 MiB default). Active log past this size becomes `<path>.1`; existing backups shift down |
+| `AUDITOR_AUDIT_LOG_BACKUPS` | `5` | Max historical files kept (`<path>.1` … `<path>.N`); the oldest is unlinked |
+| `AUDITOR_JOB_TTL_SECONDS` | `86400` | Terminal-state jobs older than this drop from `/api/audits` and the in-memory store on the next request |
 | `AUDITOR_CLAUDE_WRAPPER` | *(empty)* | Sandbox/wrapper prefix prepended to the claude argv (`shlex.split`-ed). E.g. `"nsjail -Mo --chroot /sandbox --"`. Operator owns wrapper correctness |
 
 ### Trust boundary (read before pointing this at someone else's code)
@@ -141,7 +144,7 @@ The `--repos-dir` flag overrides `AUDITOR_REPOS_DIR` for one invocation.
 | `GET /api/audit/{job_id}` | token | snapshot of one job |
 | `DELETE /api/audit/{job_id}` | token | cancel (SIGTERMs the running claude proc) |
 | `GET /api/audit/{job_id}/events` | token (`?token=`) | SSE stream of `job_started`/`task_started`/`task_done`/`job_ended` |
-| `GET /api/audits` | token | list all jobs |
+| `GET /api/audits?limit=&offset=` | token | paginated job list (newest first; `limit` clamped to `[1, 200]`) + total/limit/offset/ttl_seconds |
 | `GET /api/reports` | token | list saved reports |
 | `GET /api/report?project=&file=` | token | one report body |
 

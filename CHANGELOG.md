@@ -4,6 +4,14 @@ All notable changes to pub-project-auditor.
 
 ## Unreleased — 2026-05-23
 
+### Lifecycle & rotation
+- **JSONL audit log rotation.** Active file past `AUDITOR_AUDIT_LOG_MAX_BYTES` (default 10 MiB) is renamed to `<path>.1`; existing `.N` shifts down to `.N+1`. At most `AUDITOR_AUDIT_LOG_BACKUPS` (default 5) historical files are kept.
+- **Job TTL + auto-cleanup.** Terminal-state jobs (`done` / `cancelled` / `failed`) older than `AUDITOR_JOB_TTL_SECONDS` (default 24 h) drop from `/api/audits` and the in-memory store on the next request — keeps a long-running process from growing the job map unboundedly.
+- **`GET /api/audits` pagination.** `?limit=&offset=` (limit clamped to `[1, 200]`, offset to `[0, …)`); response includes `total`, `limit`, `offset`, `ttl_seconds`.
+- **Docker image** (`Dockerfile` + `compose.yml` + `.github/workflows/docker.yml`). Bundles the Claude Code CLI; published to `ghcr.io/oh-namgyu/pub-project-auditor` on every main push and on `v*` tags.
+- **`release-please` automation.** Conventional-commit messages drive an auto-opened release PR; merging it cuts a tag, bumps `pyproject.toml` + `CHANGELOG.md`, publishes a GitHub Release.
+- **Ruff + pytest-cov in CI.** Lint job + coverage on the 3.12 matrix, summary uploaded to the GitHub Actions Job Summary.
+
 ### Observability & extension
 - **JSONL audit log.** `AUDITOR_AUDIT_LOG_PATH` activates an append-only log file with one record per completed job (`ts`, `job_id`, `project`, `status`, `started_at`, `ended_at`, `cost_usd`, per-task outcomes, `error`). No-op when unset.
 - **Claude sandbox wrapper.** `AUDITOR_CLAUDE_WRAPPER` (shlex-split) prepends arbitrary tokens to the claude argv — e.g. `nsjail -Mo --chroot /sandbox --` or `firejail --noprofile --net=none`. Operator owns wrapper correctness.
