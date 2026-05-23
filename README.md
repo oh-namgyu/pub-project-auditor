@@ -40,7 +40,7 @@ repo so you can decide what to revive, refactor, or delete.
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/pub-project-auditor.git
+git clone https://github.com/oh-namgyu/pub-project-auditor.git
 cd pub-project-auditor
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
@@ -58,6 +58,17 @@ pub-auditor run review hello-cli
 python -m pub_auditor.server
 # → http://127.0.0.1:6020
 ```
+
+### Docker
+
+A `compose.yml` is included; `ghcr.io/oh-namgyu/pub-project-auditor:latest` is built on every push to `main`:
+
+```bash
+docker compose up -d
+docker compose logs pub-auditor
+```
+
+The compose file mounts `./work` → `/work` (the directory of repos to audit) and `./data` → `/data` (where the JSONL audit log lives). Default bind is `127.0.0.1:6020`; if you change it to expose on a network, **set `AUDITOR_TOKEN` first** — the server will refuse to start otherwise. Either supply `ANTHROPIC_API_KEY` in the environment or run `docker exec -it pub-auditor claude login` once after first boot.
 
 ## Try it on the bundled demo
 
