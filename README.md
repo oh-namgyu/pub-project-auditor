@@ -99,6 +99,8 @@ All configuration is via environment variables — see [`.env.example`](.env.exa
 | `AUDITOR_COST_USD_MAX` | *(unset)* | Per-job total Claude cost cap (USD). Once exceeded, remaining tasks are skipped with `status:"cancelled"` and a budget-overrun error |
 | `AUDITOR_TOOLS` | `Read,Glob,Grep` | Comma-separated tools passed to claude `--tools`. Default is read-only |
 | `AUDITOR_ENV_PASSTHROUGH` | *(empty)* | Extra env var names forwarded to the claude subprocess. Base allowlist already covers `PATH`/`HOME`/`USER`/`LANG`/`LC_*`/`TERM` plus prefixes `ANTHROPIC_`, `CLAUDE_`, `AWS_BEDROCK_`, `GCP_VERTEX_` |
+| `AUDITOR_AUDIT_LOG_PATH` | *(unset)* | Append-only JSONL log of every completed job — `{ts, job_id, project, status, cost_usd, error, …}`. Useful for billing / forensics |
+| `AUDITOR_CLAUDE_WRAPPER` | *(empty)* | Sandbox/wrapper prefix prepended to the claude argv (`shlex.split`-ed). E.g. `"nsjail -Mo --chroot /sandbox --"`. Operator owns wrapper correctness |
 
 ### Trust boundary (read before pointing this at someone else's code)
 

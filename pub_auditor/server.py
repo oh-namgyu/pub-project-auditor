@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from pub_auditor import scanner
+from pub_auditor import audit_log, scanner
 from pub_auditor.config import Config, ConfigError, load
 from pub_auditor.jobs import Job, JobStore
 from pub_auditor.tasks import review, security
@@ -103,6 +103,11 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
     finally:
         job.ended_at = time.time()
         await store.broadcast(job, {"type": "job_ended", **job.snapshot()})
+        # Persistent audit trail — no-op if AUDITOR_AUDIT_LOG_PATH unset.
+        try:
+            audit_log.append(cfg.audit_log_path, audit_log.for_job(job, cost_usd=cost_so_far))
+        except Exception:
+            pass
         # Signal end-of-stream so SSE listeners can close cleanly.
         await store.broadcast(job, {"type": "__close__"})
 

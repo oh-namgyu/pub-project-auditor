@@ -57,6 +57,7 @@ def run(
     timeout_sec: int = 1800,
     tools: str = DEFAULT_TOOLS,
     on_proc_start: Optional[Callable[[subprocess.Popen], None]] = None,
+    wrapper: tuple = (),
 ) -> RunResult:
     if not project_path.is_dir():
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
@@ -75,6 +76,12 @@ def run(
         "--no-session-persistence",
         "--tools", tools,
     ]
+    # Optional sandbox/wrapper prefix (nsjail, firejail, bwrap, etc.). The
+    # operator is responsible for the wrapper's correctness — we just put its
+    # tokens in front of the claude argv so subprocess starts in whatever
+    # confinement the wrapper provides.
+    if wrapper:
+        args = list(wrapper) + args
     # Popen + communicate(timeout=) instead of subprocess.run so a caller
     # (the job queue) can grab the Popen handle via on_proc_start and
     # SIGTERM it to implement cancellation.
