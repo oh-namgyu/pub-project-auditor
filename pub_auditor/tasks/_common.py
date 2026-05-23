@@ -9,11 +9,13 @@ if TYPE_CHECKING:
     from pub_auditor.config import Config
 
 
-class TaskOutcome(TypedDict):
+class TaskOutcome(TypedDict, total=False):
     success: bool
     report_path: str
     summary: str
     error: Optional[str]
+    cost_usd: Optional[float]
+    duration_ms: Optional[int]
 
 
 def save_report(reports_dir: Path, project_name: str, task: str, body: str) -> Path:
@@ -51,12 +53,16 @@ def run_task(
     result = runner.run(
         prompt, project_path,
         claude_bin=cfg.claude_bin, model=cfg.model, timeout_sec=cfg.timeout_sec,
-        on_proc_start=on_proc_start,
+        tools=cfg.tools, on_proc_start=on_proc_start,
     )
     if not result["success"]:
         return TaskOutcome(success=False, report_path="", summary="",
-                           error=result["error"] or "unknown")
+                           error=result["error"] or "unknown",
+                           cost_usd=result.get("cost_usd"),
+                           duration_ms=result.get("duration_ms"))
     body = wrap_report(project_name, task_name, result["text"], result["cost_usd"], result["duration_ms"])
     path = save_report(cfg.reports_dir, project_name, task_name, body)
     summary = (extract_summary or first_line)(result["text"])
-    return TaskOutcome(success=True, report_path=str(path), summary=summary, error=None)
+    return TaskOutcome(success=True, report_path=str(path), summary=summary, error=None,
+                       cost_usd=result.get("cost_usd"),
+                       duration_ms=result.get("duration_ms"))

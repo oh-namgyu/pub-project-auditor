@@ -35,15 +35,23 @@ class ToggleRequest(BaseModel):
 async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -> None:
     """Worker coroutine for one job. Runs each task in a thread, emits SSE
     events to subscribed listeners, respects the cancel_event between tasks
-    and propagates it into the running claude subprocess via on_proc_start."""
-    loop = asyncio.get_running_loop()
+    and propagates it into the running claude subprocess via on_proc_start.
+
+    Enforces AUDITOR_COST_USD_MAX across the job: once accumulated cost
+    exceeds the cap, remaining tasks are skipped with status=cancelled and
+    job.error is set to a budget-overrun message."""
     job.status = "running"
     job.started_at = time.time()
     await store.broadcast(job, {"type": "job_started", **job.snapshot()})
 
+    cost_so_far = 0.0
+
     try:
         for tr in job.tasks:
             if job.cancel_event.is_set():
+                tr.status = "cancelled"
+                continue
+            if cfg.cost_usd_max is not None and cost_so_far >= cfg.cost_usd_max:
                 tr.status = "cancelled"
                 continue
             tr.status = "running"
@@ -64,15 +72,23 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
             job.proc = None
             tr.outcome = dict(outcome)
             tr.ended_at = time.time()
+            cost = outcome.get("cost_usd") if isinstance(outcome, dict) else None
+            cost_so_far += float(cost or 0.0)
             if outcome.get("success"):
                 tr.status = "done"
             elif outcome.get("error") == "cancelled":
                 tr.status = "cancelled"
             else:
                 tr.status = "failed"
-            await store.broadcast(job, {"type": "task_done", "task": tr.task, **job.snapshot()})
+            await store.broadcast(job, {"type": "task_done", "task": tr.task,
+                                        "cost_so_far_usd": cost_so_far, **job.snapshot()})
 
-        if job.cancel_event.is_set() and any(t.status == "cancelled" for t in job.tasks):
+        if cfg.cost_usd_max is not None and cost_so_far >= cfg.cost_usd_max and \
+                any(t.status == "cancelled" for t in job.tasks):
+            job.status = "cancelled"
+            job.error = (f"cost cap reached: ${cost_so_far:.2f} >= ${cfg.cost_usd_max:.2f} "
+                         "(AUDITOR_COST_USD_MAX)")
+        elif job.cancel_event.is_set() and any(t.status == "cancelled" for t in job.tasks):
             job.status = "cancelled"
         elif all(t.status == "done" for t in job.tasks):
             job.status = "done"
