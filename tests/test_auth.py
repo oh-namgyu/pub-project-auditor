@@ -2,9 +2,7 @@
 non-loopback, and verifies the loopback default stays open (current behavior)."""
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -51,6 +49,7 @@ def test_loopback_default_no_token_required(_isolated_env, tmp_path):
 
 def test_protected_endpoint_blocks_without_token(_isolated_env, tmp_path):
     from fastapi.testclient import TestClient
+
     from pub_auditor.config import load
     from pub_auditor.server import create_app
 
@@ -77,6 +76,7 @@ def test_protected_endpoint_blocks_without_token(_isolated_env, tmp_path):
 
 def test_loopback_no_token_endpoint_open(_isolated_env, tmp_path):
     from fastapi.testclient import TestClient
+
     from pub_auditor.config import load
     from pub_auditor.server import create_app
 

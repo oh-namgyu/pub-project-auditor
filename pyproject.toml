@@ -22,3 +22,23 @@ pub-auditor = "pub_auditor.cli:main"
 [tool.setuptools.packages.find]
 include = ["pub_auditor*"]
 exclude = ["demo*", "reports*", "config*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+exclude = [".venv", "demo", "reports"]
+
+[tool.ruff.lint]
+# Conservative: catch real bugs, ignore style debates. E (pycodestyle),
+# F (pyflakes), I (isort), B (flake8-bugbear), UP (pyupgrade).
+select = ["E", "F", "I", "B", "UP"]
+# E501 (line-too-long) is line-length-driven; allow the few comment lines
+# that go over by treating them via the formatter. UP006/007/035/045 ban
+# old-style typing (Optional / Union / X | None) — we keep them because
+# the package supports Python 3.9 where some are not yet runtime-evaluated
+# in Pydantic / FastAPI annotations.
+ignore = ["E501", "B008", "UP006", "UP007", "UP035", "UP045"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

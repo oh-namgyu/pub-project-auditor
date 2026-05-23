@@ -22,6 +22,7 @@ def _isolated_env(monkeypatch):
 
 def _isolated_cfg(repos_dir: Path):
     from dataclasses import replace
+
     from pub_auditor.config import load
     cfg = load()
     isolated_root = repos_dir / "_proj"
@@ -114,6 +115,7 @@ def _wait_for_status(client, job_id: str, target: set, timeout: float = 5.0) -> 
 
 def test_cost_cap_skips_remaining_tasks(_isolated_env, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from pub_auditor.server import create_app
 
     _isolated_env.setenv("AUDITOR_REPOS_DIR", str(tmp_path))

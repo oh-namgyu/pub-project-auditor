@@ -1,0 +1,22 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "pub-project-auditor",
+      "include-component-in-tag": false
+    }
+  },
+  "changelog-sections": [
+    {"type": "feat", "section": "Features"},
+    {"type": "fix", "section": "Bug Fixes"},
+    {"type": "security", "section": "Security"},
+    {"type": "perf", "section": "Performance"},
+    {"type": "docs", "section": "Documentation"},
+    {"type": "ci", "section": "Continuous Integration"},
+    {"type": "build", "section": "Build System"},
+    {"type": "refactor", "section": "Code Refactoring"},
+    {"type": "test", "section": "Tests"},
+    {"type": "hardening", "section": "Security"},
+    {"type": "observability", "section": "Features"}
+  ]
+}
