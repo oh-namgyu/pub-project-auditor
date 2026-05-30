@@ -35,6 +35,7 @@ class Config:
     audit_log_path: Optional[Path]
     claude_wrapper: tuple[str, ...]
     job_ttl_seconds: int
+    mask_paths: bool
 
     @property
     def targets_path(self) -> Path:
@@ -111,4 +112,5 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
         # Default 24h: terminal jobs older than this drop out of /api/audits
         # and out of the in-memory store on the next request.
         job_ttl_seconds=int(os.environ.get("AUDITOR_JOB_TTL_SECONDS", str(24 * 3600))),
+        mask_paths=os.environ.get("AUDITOR_MASK_PATHS", "").strip().lower() in ("1", "true", "yes", "on"),
     )

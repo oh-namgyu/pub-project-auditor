@@ -112,6 +112,23 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
         await store.broadcast(job, {"type": "__close__"})
 
 
+def _mask_targets_response(data: dict) -> dict:
+    """Strip absolute filesystem paths from the /api/targets response.
+
+    Replaces `repos_dir` with the sentinel '<masked>' and each `targets[].path`
+    with `<masked>/<name>`, preserving the name for client-side display and
+    leaving the underlying targets.json untouched on disk (still used by
+    /api/audit). Enabled by AUDITOR_MASK_PATHS=1 for non-loopback deployments
+    where the absolute home path would otherwise leak.
+    """
+    out = dict(data)
+    out["repos_dir"] = "<masked>"
+    out["targets"] = [
+        {**t, "path": f"<masked>/{t.get('name', '')}"} for t in data.get("targets", [])
+    ]
+    return out
+
+
 def _check_token(cfg: Config, request: Request) -> None:
     """Compare AUDITOR_TOKEN against request token using constant-time compare.
 
@@ -146,7 +163,10 @@ def create_app(cfg: Config) -> FastAPI:
     def list_targets() -> dict:
         if not cfg.targets_path.is_file():
             scanner.write_targets(cfg, scanner.scan(cfg))
-        return json.loads(cfg.targets_path.read_text())
+        data = json.loads(cfg.targets_path.read_text())
+        if cfg.mask_paths:
+            data = _mask_targets_response(data)
+        return data
 
     @app.post("/api/rescan", dependencies=[Depends(auth)])
     def rescan() -> dict:

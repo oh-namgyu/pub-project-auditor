@@ -115,6 +115,7 @@ All configuration is via environment variables — see [`.env.example`](.env.exa
 | `AUDITOR_AUDIT_LOG_BACKUPS` | `5` | Max historical files kept (`<path>.1` … `<path>.N`); the oldest is unlinked |
 | `AUDITOR_JOB_TTL_SECONDS` | `86400` | Terminal-state jobs older than this drop from `/api/audits` and the in-memory store on the next request |
 | `AUDITOR_CLAUDE_WRAPPER` | *(empty)* | Sandbox/wrapper prefix prepended to the claude argv (`shlex.split`-ed). E.g. `"nsjail -Mo --chroot /sandbox --"`. Operator owns wrapper correctness |
+| `AUDITOR_MASK_PATHS` | `0` | When truthy (`1`/`true`/`yes`/`on`), `/api/targets` responses replace `repos_dir` with `<masked>` and each `targets[].path` with `<masked>/<name>`. The on-disk `targets.json` is unchanged so `/api/audit` still dispatches into the real path. Useful for non-loopback deployments where the operator's absolute home layout would otherwise leak |
 
 ### Trust boundary (read before pointing this at someone else's code)
 
