@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pub-project-auditor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Audit a directory of local Git repositories with Claude Code."
 readme = "README.md"
 license = { file = "LICENSE" }

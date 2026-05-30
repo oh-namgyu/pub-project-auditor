@@ -41,6 +41,43 @@ All notable changes to pub-project-auditor.
 - **`runner.py` switched from `subprocess.run` to `subprocess.Popen` + `communicate(timeout=)`** so the job worker can grab the proc handle (via the new `on_proc_start` hook) and SIGTERM it. Negative `returncode` or `130` (SIGINT) map to `error="cancelled"` for a clear UI signal.
 - **README "Trust boundary" subsection** spells out that audited repos are untrusted input, prompt-injection is in scope, and prompts (including target-repo excerpts) flow upstream to Anthropic's API.
 
+## [0.2.0](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.0...v0.2.0) (2026-05-30)
+
+
+### Features
+
+* **audit:** async jobs — SSE progress + cancel + concurrency cap ([b1ed086](https://github.com/oh-namgyu/pub-project-auditor/commit/b1ed0867d22f1d873ede8023e00f4c388a5776c6))
+* JSONL audit log + AUDITOR_CLAUDE_WRAPPER for sandboxing ([e5bcbaf](https://github.com/oh-namgyu/pub-project-auditor/commit/e5bcbaf225a99d10c54f103ef481ea12f8d6d648))
+* **lifecycle:** audit-log rotation + /api/audits pagination + job TTL ([d8be70c](https://github.com/oh-namgyu/pub-project-auditor/commit/d8be70c21c194191af477b9316507131a8b0556b))
+* **server:** AUDITOR_MASK_PATHS option scrubs /api/targets absolute paths ([d0cb213](https://github.com/oh-namgyu/pub-project-auditor/commit/d0cb213a7d018c7fb46d539ef6ffe3da0e00621c))
+
+
+### Bug Fixes
+
+* **docker:** keep README.md in build context ([6ce5002](https://github.com/oh-namgyu/pub-project-auditor/commit/6ce500268fea925f4bcb041fcda33034ff1208b1))
+
+
+### Security
+
+* AUDITOR_TOKEN gate + run_task helper + README trust boundary ([6b1dfbd](https://github.com/oh-namgyu/pub-project-auditor/commit/6b1dfbd1040d6fe2e54f6f6c21e2fd5ad7a502a8))
+* env allowlist + tools lockdown + per-job cost cap + CHANGELOG ([bf34266](https://github.com/oh-namgyu/pub-project-auditor/commit/bf34266d1dea3908e0b6de5409b612339ee7526a))
+
+
+### Documentation
+
+* **readme:** mark roadmap items as planned v0.2+ / v0.3+ ([d6ec4c0](https://github.com/oh-namgyu/pub-project-auditor/commit/d6ec4c0ed17450897d416943f46cb83aa8e09b79))
+
+
+### Continuous Integration
+
+* GitHub Actions pytest + Dependabot + SECURITY.md ([94a0b2a](https://github.com/oh-namgyu/pub-project-auditor/commit/94a0b2a01df800fbca41d77c32191947aabb8ed1))
+* ruff + pytest-cov + release-please ([739cbc2](https://github.com/oh-namgyu/pub-project-auditor/commit/739cbc2a7579a954c7b9c91aaf2902c090c0ebed))
+
+
+### Build System
+
+* Docker image (Python 3.12 slim + claude-code) + compose + ghcr publish ([84f0d39](https://github.com/oh-namgyu/pub-project-auditor/commit/84f0d3979c5b9169c42fb9fa2175f17ada639c6b))
+
 ## v0.1.0 — 2026-05-13
 
 - Initial public release.
