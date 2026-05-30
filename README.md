@@ -189,10 +189,12 @@ Each audit is a single Claude Code `-p` call. In our testing a `review` or
 
 ## Roadmap
 
-- `refactor` task (auto-create an `audit/refactor/<date>` branch with proposed cleanup)
-- `similarity` task (find public GitHub repos that solved the same problem)
-- Scheduled weekly runs (launchd / systemd / cron)
-- Per-project history view
+Items below are **planned for v0.2+** — not implemented yet. Track progress via the milestones on the GitHub Issues page.
+
+- `refactor` task — **planned v0.2** (auto-create an `audit/refactor/<date>` branch with proposed cleanup)
+- `similarity` task — **planned v0.2** (find public GitHub repos that solved the same problem)
+- Scheduled weekly runs — **planned v0.3** (launchd / systemd / cron)
+- Per-project history view — **planned v0.3**
 
 ## Contributing
 
