@@ -33,4 +33,4 @@ In-scope concerns I want to hear about:
 
 ## Supported versions
 
-Latest `main` only. See [HANDOFF.md](https://github.com/oh-namgyu/internal-docs) (private) for the rolling status if you have access.
+Latest `main` only.
