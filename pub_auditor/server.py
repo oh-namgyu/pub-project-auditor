@@ -5,6 +5,7 @@ import asyncio
 import hmac
 import json
 import time
+import traceback
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -98,6 +99,7 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
         else:
             job.status = "cancelled"
     except Exception as e:
+        traceback.print_exc()                 # 광범위 캐치 — 실제 버그를 'unexpected'로 삼키지 않게 stderr 에 트레이스백
         job.status = "failed"
         job.error = f"unexpected: {e}"
     finally:
@@ -189,7 +191,7 @@ def create_app(cfg: Config) -> FastAPI:
         if not cfg.targets_path.is_file():
             scanner.write_targets(cfg, scanner.scan(cfg))
         data = json.loads(cfg.targets_path.read_text())
-        target = next((t for t in data["targets"] if t["name"] == req.project), None)
+        target = next((t for t in data.get("targets", []) if t.get("name") == req.project), None)
         if not target:
             raise HTTPException(404, f"project not found: {req.project}")
         if not target.get("enabled", True):

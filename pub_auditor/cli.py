@@ -21,8 +21,8 @@ def _load_target(cfg: Config, name: str) -> tuple[Path, str] | None:
     if not cfg.targets_path.is_file():
         scanner.write_targets(cfg, scanner.scan(cfg))
     data = json.loads(cfg.targets_path.read_text())
-    for t in data["targets"]:
-        if t["name"] == name:
+    for t in data.get("targets", []):
+        if t.get("name") == name:
             return Path(t["path"]), t["name"]
     return None
 

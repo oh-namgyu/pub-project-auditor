@@ -164,10 +164,10 @@ def set_enabled_bulk(cfg: Config, updates: dict[str, bool]) -> int:
         return 0
     data = json.loads(cfg.targets_path.read_text())
     count = 0
-    for t in data["targets"]:
-        if t["name"] in updates:
+    for t in data.get("targets", []):
+        if t.get("name") in updates:
             t["enabled"] = bool(updates[t["name"]])
             count += 1
-    data["enabled_count"] = sum(1 for t in data["targets"] if t.get("enabled", True))
+    data["enabled_count"] = sum(1 for t in data.get("targets", []) if t.get("enabled", True))
     cfg.targets_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
     return count
