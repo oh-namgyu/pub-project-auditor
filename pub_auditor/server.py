@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
-import time
-import traceback
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -13,10 +11,23 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from pub_auditor import audit_log, scanner
+from pub_auditor import scanner
 from pub_auditor.config import Config, ConfigError, load
+from pub_auditor.job_worker import run_job
 from pub_auditor.jobs import Job, JobStore
+from pub_auditor.masking import (
+    _MASK,
+    mask_job_snapshot,
+    mask_targets_response,
+)
 from pub_auditor.tasks import TASKS
+
+# Back-compat re-exports: external callers / tests have historically reached
+# these via `pub_auditor.server.<name>`. Keep the symbol paths stable after the
+# job-worker and path-masking logic moved into dedicated modules.
+_run_job = run_job
+_mask_job_snapshot = mask_job_snapshot
+_mask_targets_response = mask_targets_response
 
 
 class AuditRequest(BaseModel):
@@ -26,134 +37,6 @@ class AuditRequest(BaseModel):
 
 class ToggleRequest(BaseModel):
     updates: dict[str, bool]
-
-
-async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -> None:
-    """Worker coroutine for one job. Runs each task in a thread, emits SSE
-    events to subscribed listeners, respects the cancel_event between tasks
-    and propagates it into the running claude subprocess via on_proc_start.
-
-    Enforces AUDITOR_COST_USD_MAX across the job: once accumulated cost
-    exceeds the cap, remaining tasks are skipped with status=cancelled and
-    job.error is set to a budget-overrun message."""
-    job.status = "running"
-    job.started_at = time.time()
-    await store.broadcast(job, {"type": "job_started", **job.snapshot()})
-
-    cost_so_far = 0.0
-
-    try:
-        for tr in job.tasks:
-            if job.cancel_event.is_set():
-                tr.status = "cancelled"
-                continue
-            if cfg.cost_usd_max is not None and cost_so_far >= cfg.cost_usd_max:
-                tr.status = "cancelled"
-                continue
-            tr.status = "running"
-            tr.started_at = time.time()
-            await store.broadcast(job, {"type": "task_started", "task": tr.task, **job.snapshot()})
-
-            fn = TASKS[tr.task]
-
-            def on_proc_start(proc) -> None:
-                job.proc = proc
-                if job.cancel_event.is_set():
-                    try:
-                        from pub_auditor import runner
-                        runner.terminate_proc(proc)
-                    except Exception:
-                        pass
-
-            outcome = await asyncio.to_thread(fn, cfg, project_path, job.project, on_proc_start)
-            job.proc = None
-            tr.outcome = dict(outcome)
-            tr.ended_at = time.time()
-            cost = outcome.get("cost_usd") if isinstance(outcome, dict) else None
-            cost_so_far += float(cost or 0.0)
-            if outcome.get("success"):
-                tr.status = "done"
-            elif outcome.get("error") == "cancelled":
-                tr.status = "cancelled"
-            else:
-                tr.status = "failed"
-            await store.broadcast(job, {"type": "task_done", "task": tr.task,
-                                        "cost_so_far_usd": cost_so_far, **job.snapshot()})
-
-        if cfg.cost_usd_max is not None and cost_so_far >= cfg.cost_usd_max and \
-                any(t.status == "cancelled" for t in job.tasks):
-            job.status = "cancelled"
-            job.error = (f"cost cap reached: ${cost_so_far:.2f} >= ${cfg.cost_usd_max:.2f} "
-                         "(AUDITOR_COST_USD_MAX)")
-        elif job.cancel_event.is_set() and any(t.status == "cancelled" for t in job.tasks):
-            job.status = "cancelled"
-        elif all(t.status == "done" for t in job.tasks):
-            job.status = "done"
-        elif any(t.status == "failed" for t in job.tasks):
-            job.status = "failed"
-            job.error = "one or more tasks failed; see per-task outcome"
-        else:
-            job.status = "cancelled"
-    except Exception as e:
-        traceback.print_exc()                 # broad catch — print the traceback to stderr so a real bug isn't swallowed as 'unexpected'
-        job.status = "failed"
-        job.error = f"unexpected: {e}"
-    finally:
-        job.ended_at = time.time()
-        await store.broadcast(job, {"type": "job_ended", **job.snapshot()})
-        # Persistent audit trail — no-op if AUDITOR_AUDIT_LOG_PATH unset.
-        try:
-            audit_log.append(cfg.audit_log_path, audit_log.for_job(job, cost_usd=cost_so_far))
-        except Exception:
-            pass
-        # Signal end-of-stream so SSE listeners can close cleanly.
-        await store.broadcast(job, {"type": "__close__"})
-
-
-_MASK = "<masked>"
-
-
-def _mask_target_path(t: dict) -> dict:
-    """Replace a target dict's absolute `path` with `<masked>/<name>`."""
-    return {**t, "path": f"{_MASK}/{t.get('name', '')}"}
-
-
-def _mask_targets_response(data: dict) -> dict:
-    """Strip absolute filesystem paths from the /api/targets response.
-
-    Replaces `repos_dir` with the sentinel '<masked>' and each path field
-    (`targets[].path` AND `excluded[].path`) with `<masked>/<name>`, preserving
-    the name for client-side display and leaving the underlying targets.json
-    untouched on disk (still used by /api/audit). Enabled by AUDITOR_MASK_PATHS=1
-    for non-loopback deployments where the absolute home path would otherwise leak.
-    """
-    out = dict(data)
-    out["repos_dir"] = _MASK
-    out["targets"] = [_mask_target_path(t) for t in data.get("targets", [])]
-    if "excluded" in data:
-        out["excluded"] = [_mask_target_path(t) for t in data.get("excluded", [])]
-    return out
-
-
-def _mask_job_snapshot(snap: dict) -> dict:
-    """Scrub absolute `report_path` from a job snapshot's per-task outcomes.
-
-    A task outcome carries `report_path` = the on-disk report file, which
-    embeds the operator's reports_dir (and thus home path). When masking is
-    on, collapse it to its basename so the UI still shows which report was
-    written without leaking the absolute layout.
-    """
-    out = dict(snap)
-    tasks = []
-    for t in snap.get("tasks", []):
-        outcome = t.get("outcome")
-        if isinstance(outcome, dict) and outcome.get("report_path"):
-            rp = str(outcome["report_path"])
-            outcome = {**outcome, "report_path": f"{_MASK}/{Path(rp).name}"}
-            t = {**t, "outcome": outcome}
-        tasks.append(t)
-    out["tasks"] = tasks
-    return out
 
 
 def _check_token(cfg: Config, request: Request, allow_query: bool = False) -> None:
@@ -198,7 +81,7 @@ def create_app(cfg: Config) -> FastAPI:
             scanner.write_targets(cfg, scanner.scan(cfg))
             data = scanner.load_targets(cfg)
         if cfg.mask_paths:
-            data = _mask_targets_response(data)
+            data = mask_targets_response(data)
         return data
 
     @app.post("/api/rescan", dependencies=[Depends(auth)])
@@ -235,13 +118,13 @@ def create_app(cfg: Config) -> FastAPI:
         except RuntimeError as e:
             raise HTTPException(429, str(e)) from e
 
-        asyncio.create_task(_run_job(cfg, store, job, project_path))
+        asyncio.create_task(run_job(cfg, store, job, project_path))
         return {"job_id": job.id, "project": req.project, "tasks": req.tasks,
                 "status": job.status}
 
     def _snap(job: Job) -> dict:
         snap = job.snapshot()
-        return _mask_job_snapshot(snap) if cfg.mask_paths else snap
+        return mask_job_snapshot(snap) if cfg.mask_paths else snap
 
     @app.get("/api/audit/{job_id}", dependencies=[Depends(auth)])
     def get_job(job_id: str) -> dict:
@@ -268,7 +151,7 @@ def create_app(cfg: Config) -> FastAPI:
 
         def _emit(payload: dict) -> str:
             if cfg.mask_paths:
-                payload = _mask_job_snapshot(payload)
+                payload = mask_job_snapshot(payload)
             return f"data: {json.dumps(payload)}\n\n"
 
         async def gen():
