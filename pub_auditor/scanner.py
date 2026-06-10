@@ -4,12 +4,19 @@ from __future__ import annotations
 import configparser
 import json
 import subprocess
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
 from pub_auditor.config import Config
+
+# Serializes read-modify-write of targets.json across threads. FastAPI runs
+# sync route handlers in a threadpool, so write_targets / set_enabled_bulk can
+# otherwise race (lost toggle, clobbered scan). A process-local lock is enough:
+# a single process owns the file (same scope as JobStore's lock).
+_targets_lock = threading.Lock()
 
 Origin = Literal["local", "owned_remote", "external"]
 Lang = Literal["python", "node", "mixed", "unknown"]
@@ -140,34 +147,60 @@ def _existing_enabled(targets_path: Path) -> dict[str, bool]:
 
 
 def write_targets(cfg: Config, targets: list[Target]) -> Path:
-    cfg.targets_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = _existing_enabled(cfg.targets_path)
-    for t in targets:
-        if t.name in existing:
-            t.enabled = existing[t.name]
-    kept = [t for t in targets if t.origin != "external"]
-    payload = {
-        "generated_at": datetime.now().astimezone().isoformat(),
-        "repos_dir": str(cfg.repos_dir),
-        "total": len(targets),
-        "kept": len(kept),
-        "enabled_count": sum(1 for t in kept if t.enabled),
-        "targets": [asdict(t) for t in kept],
-        "excluded": [asdict(t) for t in targets if t.origin == "external"],
-    }
-    cfg.targets_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
-    return cfg.targets_path
+    with _targets_lock:
+        cfg.targets_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = _existing_enabled(cfg.targets_path)
+        for t in targets:
+            if t.name in existing:
+                t.enabled = existing[t.name]
+        kept = [t for t in targets if t.origin != "external"]
+        payload = {
+            "generated_at": datetime.now().astimezone().isoformat(),
+            "repos_dir": str(cfg.repos_dir),
+            "total": len(targets),
+            "kept": len(kept),
+            "enabled_count": sum(1 for t in kept if t.enabled),
+            "targets": [asdict(t) for t in kept],
+            "excluded": [asdict(t) for t in targets if t.origin == "external"],
+        }
+        cfg.targets_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+        return cfg.targets_path
 
 
 def set_enabled_bulk(cfg: Config, updates: dict[str, bool]) -> int:
+    with _targets_lock:
+        if not cfg.targets_path.is_file():
+            return 0
+        data = json.loads(cfg.targets_path.read_text())
+        count = 0
+        for t in data.get("targets", []):
+            if t.get("name") in updates:
+                t["enabled"] = bool(updates[t["name"]])
+                count += 1
+        data["enabled_count"] = sum(1 for t in data.get("targets", []) if t.get("enabled", True))
+        cfg.targets_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        return count
+
+
+class TargetsError(RuntimeError):
+    """Raised when targets.json exists but cannot be parsed."""
+
+
+def load_targets(cfg: Config) -> dict:
+    """Read targets.json, scanning once if it doesn't exist yet.
+
+    Raises TargetsError if the file is present but corrupt, so callers can
+    surface a clear error (or trigger a rescan) instead of a raw JSONDecodeError.
+    """
     if not cfg.targets_path.is_file():
-        return 0
-    data = json.loads(cfg.targets_path.read_text())
-    count = 0
-    for t in data.get("targets", []):
-        if t.get("name") in updates:
-            t["enabled"] = bool(updates[t["name"]])
-            count += 1
-    data["enabled_count"] = sum(1 for t in data.get("targets", []) if t.get("enabled", True))
-    cfg.targets_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-    return count
+        write_targets(cfg, scan(cfg))
+    try:
+        return json.loads(cfg.targets_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        raise TargetsError(f"targets.json is unreadable or corrupt: {e}") from e
+
+
+def find_target(cfg: Config, name: str) -> Optional[dict]:
+    """Return the target dict for `name` (from the enabled `targets` list), or None."""
+    data = load_targets(cfg)
+    return next((t for t in data.get("targets", []) if t.get("name") == name), None)

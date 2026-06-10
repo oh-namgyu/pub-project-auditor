@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 from typing import Callable, Optional, TypedDict
@@ -25,6 +26,34 @@ def _resolve_bin(claude_bin: Optional[str]) -> Optional[str]:
 
 
 DEFAULT_TOOLS = "Read,Glob,Grep"
+
+
+def _signal_group(proc: subprocess.Popen, sig: int) -> None:
+    """Send `sig` to the process's whole group, falling back to the single
+    process. We spawn claude with start_new_session=True so it leads its own
+    process group; signalling the group reaches any child it spawned (e.g. an
+    MCP server or a sandbox wrapper's grandchild) instead of orphaning them."""
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        # Group gone or no permission (e.g. wrapper re-parented) — best-effort
+        # single-process signal so we at least try to stop the immediate child.
+        try:
+            proc.send_signal(sig)
+        except Exception:
+            pass
+
+
+def terminate_proc(proc: subprocess.Popen) -> None:
+    """SIGTERM the claude process group (used for user-initiated cancel)."""
+    _signal_group(proc, signal.SIGTERM)
+
+
+def kill_proc(proc: subprocess.Popen) -> None:
+    """SIGKILL the claude process group (used on timeout)."""
+    _signal_group(proc, signal.SIGKILL)
 
 # Environment variables passed to the claude subprocess. Anything outside
 # this allowlist is dropped — keeps unrelated app secrets in the operator's
@@ -89,6 +118,9 @@ def run(
         proc = subprocess.Popen(
             args, cwd=str(project_path), env=_filtered_env(),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            # New session/process group so cancel & timeout can signal the
+            # whole group (claude + any child it or the wrapper spawns).
+            start_new_session=True,
         )
     except OSError as e:
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
@@ -101,7 +133,7 @@ def run(
     try:
         stdout, stderr = proc.communicate(timeout=timeout_sec)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        kill_proc(proc)
         proc.communicate()
         return RunResult(success=False, text="", cost_usd=None, duration_ms=None,
                          error=f"timeout after {timeout_sec}s")
@@ -127,10 +159,14 @@ def _parse(stdout: str) -> RunResult:
     except json.JSONDecodeError as e:
         return RunResult(success=False, text=stdout, cost_usd=None, duration_ms=None,
                          error=f"invalid JSON output: {e}")
+    # The current Claude Code CLI emits `total_cost_usd`; older builds used
+    # `cost_usd`. Prefer the new key, fall back to the old — otherwise the
+    # cost reads as None and AUDITOR_COST_USD_MAX never trips.
+    cost = data.get("total_cost_usd", data.get("cost_usd"))
     text = data.get("result") or data.get("text") or ""
     if not text:
-        return RunResult(success=False, text="", cost_usd=data.get("cost_usd"),
+        return RunResult(success=False, text="", cost_usd=cost,
                          duration_ms=data.get("duration_ms"), error="empty result field")
     return RunResult(success=True, text=text,
-                     cost_usd=data.get("cost_usd"),
+                     cost_usd=cost,
                      duration_ms=data.get("duration_ms"), error=None)

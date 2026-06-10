@@ -1,8 +1,21 @@
 const $ = (s) => document.querySelector(s);
 let _targets = [];
 
+// Dashboard auth token, read once from the page URL (?token=...). When
+// AUDITOR_TOKEN is set server-side, every /api/* call must carry it as a
+// Bearer header or the gate returns 401. Empty string in loopback mode.
+const _token = new URL(location.href).searchParams.get("token") || "";
+
+function _authHeaders(extra) {
+  const h = { ...(extra || {}) };
+  if (_token) h["Authorization"] = `Bearer ${_token}`;
+  return h;
+}
+
 async function api(url, opts) {
-  const r = await fetch(url, opts);
+  const o = { ...(opts || {}) };
+  o.headers = _authHeaders(o.headers);
+  const r = await fetch(url, o);
   if (!r.ok) throw new Error(`${url} -> ${r.status}`);
   return r.json();
 }
@@ -75,7 +88,10 @@ async function openReport(project, file) {
   const c = $("#modal-content");
   c.innerHTML = `<p class="muted">Loading…</p>`;
   try {
-    const r = await fetch(`/api/report?project=${encodeURIComponent(project)}&file=${encodeURIComponent(file)}`);
+    const r = await fetch(
+      `/api/report?project=${encodeURIComponent(project)}&file=${encodeURIComponent(file)}`,
+      { headers: _authHeaders() },
+    );
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const md = await r.text();
     c.innerHTML = DOMPurify.sanitize(marked.parse(md));
@@ -113,7 +129,7 @@ let _currentSource = null;
 
 function _cancelCurrentJob() {
   if (!_currentJob) return;
-  fetch(`/api/audit/${encodeURIComponent(_currentJob)}`, { method: "DELETE" })
+  fetch(`/api/audit/${encodeURIComponent(_currentJob)}`, { method: "DELETE", headers: _authHeaders() })
     .catch(() => {});
 }
 
@@ -142,10 +158,9 @@ $("#run-btn").addEventListener("click", async () => {
   if (cancelBtn) cancelBtn.hidden = false;
   $("#run-status").textContent = `Started job ${job.job_id} — listening for progress…`;
 
-  // SSE auth uses query token (EventSource can't set Authorization headers).
-  // Falls back to no token in loopback mode.
-  const t = new URL(location.href).searchParams.get("token") || "";
-  const src = new EventSource(`/api/audit/${encodeURIComponent(job.job_id)}/events?token=${encodeURIComponent(t)}`);
+  // SSE auth uses the query token (EventSource can't set Authorization
+  // headers). Falls back to no token in loopback mode.
+  const src = new EventSource(`/api/audit/${encodeURIComponent(job.job_id)}/events?token=${encodeURIComponent(_token)}`);
   _currentSource = src;
 
   src.onmessage = (m) => {

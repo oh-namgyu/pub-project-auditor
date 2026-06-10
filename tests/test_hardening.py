@@ -135,8 +135,8 @@ def test_cost_cap_skips_remaining_tasks(_isolated_env, tmp_path, monkeypatch):
         return {"success": True, "report_path": "/tmp/y.md", "summary": "ok",
                 "error": None, "cost_usd": 0.01, "duration_ms": 100}
 
-    monkeypatch.setitem(srv.TASK_MAP, "review", expensive)
-    monkeypatch.setitem(srv.TASK_MAP, "security", second)
+    monkeypatch.setitem(srv.TASKS, "review", expensive)
+    monkeypatch.setitem(srv.TASKS, "security", second)
     client = TestClient(app)
     client.get("/api/targets")
 

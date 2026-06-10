@@ -97,7 +97,7 @@ def test_audit_log_written_after_job(_isolated_env, tmp_path, monkeypatch):
         return {"success": True, "report_path": "/tmp/x.md", "summary": "ok",
                 "error": None, "cost_usd": 0.05, "duration_ms": 100}
 
-    monkeypatch.setitem(srv.TASK_MAP, "review", fake)
+    monkeypatch.setitem(srv.TASKS, "review", fake)
     client = TestClient(app)
     client.get("/api/targets")
 

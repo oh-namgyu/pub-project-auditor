@@ -54,6 +54,16 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _int_env(name: str, default: str) -> int:
+    """Parse an int env var, raising ConfigError (not a raw ValueError) on
+    bad input so misconfiguration surfaces as a clean '[config] ...' message."""
+    raw = os.environ.get(name, default).strip() or default
+    try:
+        return int(raw)
+    except ValueError as e:
+        raise ConfigError(f"{name} must be an integer; got {raw!r}") from e
+
+
 def load(repos_dir_override: Optional[str] = None) -> Config:
     repos_raw = repos_dir_override or os.environ.get("AUDITOR_REPOS_DIR", "").strip()
     if not repos_raw:
@@ -97,20 +107,20 @@ def load(repos_dir_override: Optional[str] = None) -> Config:
     return Config(
         repos_dir=repos_dir,
         owners=owners,
-        port=int(os.environ.get("AUDITOR_PORT", "6020")),
+        port=_int_env("AUDITOR_PORT", "6020"),
         host=host,
         claude_bin=os.environ.get("CLAUDE_BIN") or None,
         model=os.environ.get("AUDITOR_MODEL", "sonnet"),
-        timeout_sec=int(os.environ.get("AUDITOR_TIMEOUT_SEC", "1800")),
+        timeout_sec=_int_env("AUDITOR_TIMEOUT_SEC", "1800"),
         project_root=_project_root(),
         auth_token=auth_token,
-        max_concurrent=max(1, int(os.environ.get("AUDITOR_MAX_CONCURRENT", "2"))),
+        max_concurrent=max(1, _int_env("AUDITOR_MAX_CONCURRENT", "2")),
         cost_usd_max=cost_usd_max,
         tools=os.environ.get("AUDITOR_TOOLS", "Read,Glob,Grep"),
         audit_log_path=audit_log_path,
         claude_wrapper=claude_wrapper,
         # Default 24h: terminal jobs older than this drop out of /api/audits
         # and out of the in-memory store on the next request.
-        job_ttl_seconds=int(os.environ.get("AUDITOR_JOB_TTL_SECONDS", str(24 * 3600))),
+        job_ttl_seconds=_int_env("AUDITOR_JOB_TTL_SECONDS", str(24 * 3600)),
         mask_paths=os.environ.get("AUDITOR_MASK_PATHS", "").strip().lower() in ("1", "true", "yes", "on"),
     )

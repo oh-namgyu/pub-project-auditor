@@ -123,7 +123,8 @@ class JobStore:
         job.cancel_event.set()
         if job.proc is not None:
             try:
-                job.proc.terminate()
+                from pub_auditor import runner  # local import avoids import cycle
+                runner.terminate_proc(job.proc)
             except Exception:
                 pass
         return True

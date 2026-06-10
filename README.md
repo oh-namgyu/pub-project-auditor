@@ -64,11 +64,19 @@ python -m pub_auditor.server
 A `compose.yml` is included; `ghcr.io/oh-namgyu/pub-project-auditor:latest` is built on every push to `main`:
 
 ```bash
+# The container binds 0.0.0.0 internally (Docker publishes it on 127.0.0.1),
+# so a token is REQUIRED. Generate one and put it in a .env file next to
+# compose.yml — `docker compose` loads it automatically.
+echo "AUDITOR_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> .env
+
 docker compose up -d
 docker compose logs pub-auditor
+
+# Open the dashboard with the token in the URL:
+#   http://127.0.0.1:6020/?token=<the value you generated>
 ```
 
-The compose file mounts `./work` → `/work` (the directory of repos to audit) and `./data` → `/data` (where the JSONL audit log lives). Default bind is `127.0.0.1:6020`; if you change it to expose on a network, **set `AUDITOR_TOKEN` first** — the server will refuse to start otherwise. Either supply `ANTHROPIC_API_KEY` in the environment or run `docker exec -it pub-auditor claude login` once after first boot.
+The compose file mounts `./work` → `/work` (the directory of repos to audit) and `./data` → `/data` (where the JSONL audit log lives). Docker publishes the port on `127.0.0.1:6020`, but the container itself binds `0.0.0.0`, so the server always requires `AUDITOR_TOKEN` — set it (as above) before `docker compose up`, or compose will stop with a clear error. Pass the token to the dashboard via `?token=<token>` in the URL (or `Authorization: Bearer <token>` for API calls). Either supply `ANTHROPIC_API_KEY` in the environment or run `docker exec -it pub-auditor claude login` once after first boot.
 
 ## Try it on the bundled demo
 

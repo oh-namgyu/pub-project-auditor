@@ -20,9 +20,14 @@ services:
       AUDITOR_HOST: 0.0.0.0
       AUDITOR_PORT: 6020
       AUDITOR_AUDIT_LOG_PATH: /data/audit.log
-      # Required when not on loopback. Generate with:
+      # The container binds 0.0.0.0 (so the published port reaches it), so the
+      # server REQUIRES a token even though Docker only publishes it on
+      # 127.0.0.1 above. Set AUDITOR_TOKEN in a .env file next to this compose
+      # file (compose auto-loads it); the `:?` makes `docker compose up` fail
+      # fast with a clear message if it's missing instead of the container
+      # refusing to start. Generate one with:
       #   python -c "import secrets; print(secrets.token_urlsafe(32))"
-      # AUDITOR_TOKEN: ${AUDITOR_TOKEN:-}
+      AUDITOR_TOKEN: ${AUDITOR_TOKEN:?set AUDITOR_TOKEN in a .env file (see README Quick start / Docker)}
       # AUDITOR_MAX_CONCURRENT: "2"
       # AUDITOR_COST_USD_MAX: "1.00"
       # Anthropic credentials. Either ANTHROPIC_API_KEY here or sign in

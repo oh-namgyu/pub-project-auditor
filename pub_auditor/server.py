@@ -16,12 +16,7 @@ from pydantic import BaseModel
 from pub_auditor import audit_log, scanner
 from pub_auditor.config import Config, ConfigError, load
 from pub_auditor.jobs import Job, JobStore
-from pub_auditor.tasks import review, security
-
-TASK_MAP = {
-    "review": review.run_review,
-    "security": security.run_security,
-}
+from pub_auditor.tasks import TASKS
 
 
 class AuditRequest(BaseModel):
@@ -59,13 +54,14 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
             tr.started_at = time.time()
             await store.broadcast(job, {"type": "task_started", "task": tr.task, **job.snapshot()})
 
-            fn = TASK_MAP[tr.task]
+            fn = TASKS[tr.task]
 
             def on_proc_start(proc) -> None:
                 job.proc = proc
                 if job.cancel_event.is_set():
                     try:
-                        proc.terminate()
+                        from pub_auditor import runner
+                        runner.terminate_proc(proc)
                     except Exception:
                         pass
 
@@ -99,7 +95,7 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
         else:
             job.status = "cancelled"
     except Exception as e:
-        traceback.print_exc()                 # 광범위 캐치 — 실제 버그를 'unexpected'로 삼키지 않게 stderr 에 트레이스백
+        traceback.print_exc()                 # broad catch — print the traceback to stderr so a real bug isn't swallowed as 'unexpected'
         job.status = "failed"
         job.error = f"unexpected: {e}"
     finally:
@@ -114,34 +110,66 @@ async def _run_job(cfg: Config, store: JobStore, job: Job, project_path: Path) -
         await store.broadcast(job, {"type": "__close__"})
 
 
+_MASK = "<masked>"
+
+
+def _mask_target_path(t: dict) -> dict:
+    """Replace a target dict's absolute `path` with `<masked>/<name>`."""
+    return {**t, "path": f"{_MASK}/{t.get('name', '')}"}
+
+
 def _mask_targets_response(data: dict) -> dict:
     """Strip absolute filesystem paths from the /api/targets response.
 
-    Replaces `repos_dir` with the sentinel '<masked>' and each `targets[].path`
-    with `<masked>/<name>`, preserving the name for client-side display and
-    leaving the underlying targets.json untouched on disk (still used by
-    /api/audit). Enabled by AUDITOR_MASK_PATHS=1 for non-loopback deployments
-    where the absolute home path would otherwise leak.
+    Replaces `repos_dir` with the sentinel '<masked>' and each path field
+    (`targets[].path` AND `excluded[].path`) with `<masked>/<name>`, preserving
+    the name for client-side display and leaving the underlying targets.json
+    untouched on disk (still used by /api/audit). Enabled by AUDITOR_MASK_PATHS=1
+    for non-loopback deployments where the absolute home path would otherwise leak.
     """
     out = dict(data)
-    out["repos_dir"] = "<masked>"
-    out["targets"] = [
-        {**t, "path": f"<masked>/{t.get('name', '')}"} for t in data.get("targets", [])
-    ]
+    out["repos_dir"] = _MASK
+    out["targets"] = [_mask_target_path(t) for t in data.get("targets", [])]
+    if "excluded" in data:
+        out["excluded"] = [_mask_target_path(t) for t in data.get("excluded", [])]
     return out
 
 
-def _check_token(cfg: Config, request: Request) -> None:
+def _mask_job_snapshot(snap: dict) -> dict:
+    """Scrub absolute `report_path` from a job snapshot's per-task outcomes.
+
+    A task outcome carries `report_path` = the on-disk report file, which
+    embeds the operator's reports_dir (and thus home path). When masking is
+    on, collapse it to its basename so the UI still shows which report was
+    written without leaking the absolute layout.
+    """
+    out = dict(snap)
+    tasks = []
+    for t in snap.get("tasks", []):
+        outcome = t.get("outcome")
+        if isinstance(outcome, dict) and outcome.get("report_path"):
+            rp = str(outcome["report_path"])
+            outcome = {**outcome, "report_path": f"{_MASK}/{Path(rp).name}"}
+            t = {**t, "outcome": outcome}
+        tasks.append(t)
+    out["tasks"] = tasks
+    return out
+
+
+def _check_token(cfg: Config, request: Request, allow_query: bool = False) -> None:
     """Compare AUDITOR_TOKEN against request token using constant-time compare.
 
-    Accepts either `Authorization: Bearer <token>` or `?token=<token>`. When
-    `cfg.auth_token` is None (loopback-only deploy) the gate is a no-op.
+    Reads `Authorization: Bearer <token>`. The `?token=<token>` query fallback
+    is only honored when `allow_query=True` (the SSE endpoint, since EventSource
+    can't set headers) — for every other route we require the header so the
+    secret doesn't end up in access logs / referrers. When `cfg.auth_token` is
+    None (loopback-only deploy) the gate is a no-op.
     """
     if cfg.auth_token is None:
         return
     auth = request.headers.get("authorization", "")
     presented = auth.removeprefix("Bearer ").strip() if auth.lower().startswith("bearer ") else ""
-    if not presented:
+    if not presented and allow_query:
         presented = request.query_params.get("token", "")
     if not presented or not hmac.compare_digest(presented, cfg.auth_token):
         raise HTTPException(status_code=401, detail="invalid or missing token")
@@ -163,9 +191,12 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/api/targets", dependencies=[Depends(auth)])
     def list_targets() -> dict:
-        if not cfg.targets_path.is_file():
+        try:
+            data = scanner.load_targets(cfg)
+        except scanner.TargetsError:
+            # Corrupt on disk — rebuild from a fresh scan rather than 500.
             scanner.write_targets(cfg, scanner.scan(cfg))
-        data = json.loads(cfg.targets_path.read_text())
+            data = scanner.load_targets(cfg)
         if cfg.mask_paths:
             data = _mask_targets_response(data)
         return data
@@ -173,7 +204,8 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/api/rescan", dependencies=[Depends(auth)])
     def rescan() -> dict:
         path = scanner.write_targets(cfg, scanner.scan(cfg))
-        return {"ok": True, "path": str(path)}
+        # Absolute path leaks the operator's layout — mask when enabled.
+        return {"ok": True, "path": _MASK if cfg.mask_paths else str(path)}
 
     @app.post("/api/targets/toggle", dependencies=[Depends(auth)])
     def toggle(req: ToggleRequest) -> dict:
@@ -183,15 +215,15 @@ def create_app(cfg: Config) -> FastAPI:
     async def trigger_audit(req: AuditRequest) -> dict:
         """Enqueue an audit job. Returns 202 + job_id; subscribe to
         /api/audit/events/{id} for progress, DELETE /api/audit/{id} to cancel."""
-        unknown = [t for t in req.tasks if t not in TASK_MAP]
+        unknown = [t for t in req.tasks if t not in TASKS]
         if unknown:
             raise HTTPException(400, f"unknown tasks: {unknown}")
         if not req.tasks:
             raise HTTPException(400, "tasks must be non-empty")
-        if not cfg.targets_path.is_file():
-            scanner.write_targets(cfg, scanner.scan(cfg))
-        data = json.loads(cfg.targets_path.read_text())
-        target = next((t for t in data.get("targets", []) if t.get("name") == req.project), None)
+        try:
+            target = scanner.find_target(cfg, req.project)
+        except scanner.TargetsError as e:
+            raise HTTPException(500, f"targets.json unreadable: {e}") from e
         if not target:
             raise HTTPException(404, f"project not found: {req.project}")
         if not target.get("enabled", True):
@@ -207,12 +239,16 @@ def create_app(cfg: Config) -> FastAPI:
         return {"job_id": job.id, "project": req.project, "tasks": req.tasks,
                 "status": job.status}
 
+    def _snap(job: Job) -> dict:
+        snap = job.snapshot()
+        return _mask_job_snapshot(snap) if cfg.mask_paths else snap
+
     @app.get("/api/audit/{job_id}", dependencies=[Depends(auth)])
     def get_job(job_id: str) -> dict:
         job = store.get(job_id)
         if job is None:
             raise HTTPException(404, "job not found")
-        return job.snapshot()
+        return _snap(job)
 
     @app.delete("/api/audit/{job_id}", dependencies=[Depends(auth)])
     def cancel_job(job_id: str) -> dict:
@@ -225,16 +261,27 @@ def create_app(cfg: Config) -> FastAPI:
         """SSE stream of job events. Token comes from ?token= query string
         rather than Authorization header because EventSource API can't set
         headers. Same constant-time compare as the rest of the gate."""
-        _check_token(cfg, request)
+        _check_token(cfg, request, allow_query=True)
         job = store.get(job_id)
         if job is None:
             raise HTTPException(404, "job not found")
+
+        def _emit(payload: dict) -> str:
+            if cfg.mask_paths:
+                payload = _mask_job_snapshot(payload)
+            return f"data: {json.dumps(payload)}\n\n"
 
         async def gen():
             q = store.subscribe(job)
             try:
                 # Initial snapshot so a late subscriber sees current state.
-                yield f"data: {json.dumps({'type': 'snapshot', **job.snapshot()})}\n\n"
+                yield _emit({"type": "snapshot", **job.snapshot()})
+                # If the job already reached a terminal state before this
+                # subscriber connected, there will be no further events (the
+                # __close__ was already broadcast). Close now instead of
+                # holding the stream open forever.
+                if job.status in ("done", "failed", "cancelled"):
+                    return
                 while True:
                     try:
                         event = await asyncio.wait_for(q.get(), timeout=25.0)
@@ -243,7 +290,7 @@ def create_app(cfg: Config) -> FastAPI:
                         continue
                     if event.get("type") == "__close__":
                         break
-                    yield f"data: {json.dumps(event)}\n\n"
+                    yield _emit(event)
             finally:
                 store.unsubscribe(job, q)
 
@@ -260,7 +307,7 @@ def create_app(cfg: Config) -> FastAPI:
         all_sorted = sorted(store.all(), key=lambda j: -j.created_at)
         page = all_sorted[offset : offset + limit]
         return {
-            "jobs": [j.snapshot() for j in page],
+            "jobs": [_snap(j) for j in page],
             "total": len(all_sorted),
             "limit": limit,
             "offset": offset,

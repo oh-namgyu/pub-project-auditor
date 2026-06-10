@@ -22,7 +22,7 @@ def _isolated_env(monkeypatch):
 
 
 def _stub_task_map(monkeypatch, mock_outcome):
-    """Replace TASK_MAP entries so trigger_audit doesn't actually spawn claude."""
+    """Replace TASKS entries so trigger_audit doesn't actually spawn claude."""
     from pub_auditor import server as srv
 
     def fake_review(cfg, project_path, project_name, on_proc_start=None):
@@ -31,8 +31,8 @@ def _stub_task_map(monkeypatch, mock_outcome):
     def fake_security(cfg, project_path, project_name, on_proc_start=None):
         return dict(mock_outcome)
 
-    monkeypatch.setitem(srv.TASK_MAP, "review", fake_review)
-    monkeypatch.setitem(srv.TASK_MAP, "security", fake_security)
+    monkeypatch.setitem(srv.TASKS, "review", fake_review)
+    monkeypatch.setitem(srv.TASKS, "security", fake_security)
 
 
 def _seed_targets(repos_dir: Path) -> None:
@@ -119,7 +119,7 @@ def test_audit_concurrency_cap(_isolated_env, tmp_path, monkeypatch):
         return {"success": True, "report_path": "/tmp/x.md", "summary": "ok", "error": None}
 
     from pub_auditor import server as srv
-    monkeypatch.setitem(srv.TASK_MAP, "review", slow_task)
+    monkeypatch.setitem(srv.TASKS, "review", slow_task)
     client = TestClient(app)
     client.get("/api/targets")  # trigger scan
 
@@ -161,8 +161,8 @@ def test_audit_cancel(_isolated_env, tmp_path, monkeypatch):
     def second(cfg, project_path, project_name, on_proc_start=None):
         return {"success": True, "report_path": "/tmp/y.md", "summary": "ok", "error": None}
 
-    monkeypatch.setitem(srv.TASK_MAP, "review", first)
-    monkeypatch.setitem(srv.TASK_MAP, "security", second)
+    monkeypatch.setitem(srv.TASKS, "review", first)
+    monkeypatch.setitem(srv.TASKS, "security", second)
     client = TestClient(app)
     client.get("/api/targets")
 

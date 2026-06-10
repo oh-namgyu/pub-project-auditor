@@ -2,29 +2,20 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from pub_auditor import scanner
 from pub_auditor.config import Config, ConfigError, load
-from pub_auditor.tasks import review, security
+from pub_auditor.tasks import TASKS
 from pub_auditor.tasks._common import TaskOutcome
-
-TASKS = {
-    "review": review.run_review,
-    "security": security.run_security,
-}
 
 
 def _load_target(cfg: Config, name: str) -> tuple[Path, str] | None:
-    if not cfg.targets_path.is_file():
-        scanner.write_targets(cfg, scanner.scan(cfg))
-    data = json.loads(cfg.targets_path.read_text())
-    for t in data.get("targets", []):
-        if t.get("name") == name:
-            return Path(t["path"]), t["name"]
-    return None
+    target = scanner.find_target(cfg, name)
+    if target is None:
+        return None
+    return Path(target["path"]), target["name"]
 
 
 def cmd_scan(cfg: Config, _args: argparse.Namespace) -> int:

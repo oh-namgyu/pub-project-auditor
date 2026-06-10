@@ -69,9 +69,32 @@ def test_protected_endpoint_blocks_without_token(_isolated_env, tmp_path):
     # with right token (header form)
     r = client.get("/api/targets", headers={"Authorization": "Bearer tok-abc-123"})
     assert r.status_code == 200
-    # with right token (query param)
+    # query-param token is NOT accepted on regular endpoints anymore — only the
+    # SSE /events route honors ?token= (EventSource can't set headers). This
+    # keeps the secret out of access logs for everything else.
     r = client.get("/api/targets?token=tok-abc-123")
-    assert r.status_code == 200
+    assert r.status_code == 401
+
+
+def test_query_token_allowed_only_on_sse(_isolated_env, tmp_path):
+    """?token= works for the SSE events endpoint but not for other routes."""
+    from fastapi.testclient import TestClient
+
+    from pub_auditor.config import load
+    from pub_auditor.server import create_app
+
+    _isolated_env.setenv("AUDITOR_REPOS_DIR", str(tmp_path))
+    _isolated_env.setenv("AUDITOR_HOST", "0.0.0.0")
+    _isolated_env.setenv("AUDITOR_TOKEN", "tok-abc-123")
+    cfg = load()
+    client = TestClient(create_app(cfg))
+
+    # Unknown job → 404 (not 401) proves the query token passed the gate.
+    r = client.get("/api/audit/nope/events?token=tok-abc-123")
+    assert r.status_code == 404
+    # Wrong query token on the SSE route is still rejected.
+    r = client.get("/api/audit/nope/events?token=wrong")
+    assert r.status_code == 401
 
 
 def test_loopback_no_token_endpoint_open(_isolated_env, tmp_path):
