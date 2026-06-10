@@ -1,5 +1,7 @@
 # pub-project-auditor
 
+**[🇰🇷 한국어 README](README_KOR.md)**
+
 > Audit every Git repo on your laptop with Claude Code — in one command.
 
 `pub-project-auditor` scans a directory of local Git repositories and runs
