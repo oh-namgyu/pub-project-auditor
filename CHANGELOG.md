@@ -41,6 +41,56 @@ All notable changes to pub-project-auditor.
 - **`runner.py` switched from `subprocess.run` to `subprocess.Popen` + `communicate(timeout=)`** so the job worker can grab the proc handle (via the new `on_proc_start` hook) and SIGTERM it. Negative `returncode` or `130` (SIGINT) map to `error="cancelled"` for a clear UI signal.
 - **README "Trust boundary" subsection** spells out that audited repos are untrusted input, prompt-injection is in scope, and prompts (including target-repo excerpts) flow upstream to Anthropic's API.
 
+## [0.2.0](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.0...v0.2.0) (2026-06-17)
+
+
+### Features
+
+* **audit:** async jobs — SSE progress + cancel + concurrency cap ([f2aece1](https://github.com/oh-namgyu/pub-project-auditor/commit/f2aece1d5048cdc7b6cd5846c98bd7e798e629a3))
+* JSONL audit log + AUDITOR_CLAUDE_WRAPPER for sandboxing ([3811ca2](https://github.com/oh-namgyu/pub-project-auditor/commit/3811ca24b9e77857fb0fa2f76fb9f3dca80b5b5a))
+* **lifecycle:** audit-log rotation + /api/audits pagination + job TTL ([fb23e22](https://github.com/oh-namgyu/pub-project-auditor/commit/fb23e22e26303bafc7f175ba2ac8d0472337ed51))
+* **server:** AUDITOR_MASK_PATHS option scrubs /api/targets absolute paths ([45df804](https://github.com/oh-namgyu/pub-project-auditor/commit/45df804f03600d69643fe4ded81264eba2909355))
+
+
+### Bug Fixes
+
+* close path-mask leak, restore cost cap, fix dashboard auth and job lifecycle ([9050148](https://github.com/oh-namgyu/pub-project-auditor/commit/90501480b6c2b5729cad3ec897f9dfd7b28488d5))
+* **docker:** keep README.md in build context ([95bb1fa](https://github.com/oh-namgyu/pub-project-auditor/commit/95bb1fa0c2200ad65d049e3d3d49304bb7f93c13))
+
+
+### Security
+
+* AUDITOR_TOKEN gate + run_task helper + README trust boundary ([43557ff](https://github.com/oh-namgyu/pub-project-auditor/commit/43557ff43e3df8c778235d46bac5b886ae74b93f))
+* env allowlist + tools lockdown + per-job cost cap + CHANGELOG ([c67e4f6](https://github.com/oh-namgyu/pub-project-auditor/commit/c67e4f6f5a718d8f27b5f8a476689317eccc4c8b))
+
+
+### Documentation
+
+* add Korean README (README_KOR.md) ([dda3404](https://github.com/oh-namgyu/pub-project-auditor/commit/dda3404d50640cdd5059938912e08d5df97add00))
+* link Korean README from the top of README ([7562530](https://github.com/oh-namgyu/pub-project-auditor/commit/7562530a8396115d80fe2ab89fb88f26fc144c66))
+* **readme:** mark roadmap items as planned v0.2+ / v0.3+ ([bc37f98](https://github.com/oh-namgyu/pub-project-auditor/commit/bc37f98bd949bfab02c7f34773518ae15ffe4a19))
+
+
+### Continuous Integration
+
+* GitHub Actions pytest + Dependabot + SECURITY.md ([c0b303a](https://github.com/oh-namgyu/pub-project-auditor/commit/c0b303a40bbb58bb5eb5af9027a19805cac2f1cd))
+* ruff + pytest-cov + release-please ([844bac0](https://github.com/oh-namgyu/pub-project-auditor/commit/844bac086ac85b2b2a6f262ec9716eacd013b6bc))
+
+
+### Build System
+
+* Docker image (Python 3.12 slim + claude-code) + compose + ghcr publish ([6e76e71](https://github.com/oh-namgyu/pub-project-auditor/commit/6e76e71d44fcc5982311d93c8b3a52bccca6ca44))
+
+
+### Code Refactoring
+
+* extract job worker and path masking from server.py ([9c3e084](https://github.com/oh-namgyu/pub-project-auditor/commit/9c3e084efefb06d27b16d4d1cd4c00294f7b24e3))
+
+
+### Tests
+
+* cover the CLI (was 0%); add coverage floor + CONTRIBUTING ([6938f6e](https://github.com/oh-namgyu/pub-project-auditor/commit/6938f6e21b324b82111d75cd177d096b0232bc82))
+
 ## v0.1.0 — 2026-05-13
 
 - Initial public release.
