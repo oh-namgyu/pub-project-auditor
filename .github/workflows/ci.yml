@@ -39,7 +39,7 @@ jobs:
           pip install pytest pytest-cov httpx
 
       - name: Run pytest with coverage
-        run: pytest tests/ -v --cov=pub_auditor --cov-report=term-missing --cov-report=xml
+        run: pytest tests/ -v --cov=pub_auditor --cov-report=term-missing --cov-report=xml --cov-fail-under=60
 
       - name: Upload coverage to job summary
         if: always() && matrix.python-version == '3.12'
