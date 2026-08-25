@@ -41,6 +41,17 @@ All notable changes to pub-project-auditor.
 - **`runner.py` switched from `subprocess.run` to `subprocess.Popen` + `communicate(timeout=)`** so the job worker can grab the proc handle (via the new `on_proc_start` hook) and SIGTERM it. Negative `returncode` or `130` (SIGINT) map to `error="cancelled"` for a clear UI signal.
 - **README "Trust boundary" subsection** spells out that audited repos are untrusted input, prompt-injection is in scope, and prompts (including target-repo excerpts) flow upstream to Anthropic's API.
 
+## [0.1.1](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.0...v0.1.1) (2026-08-25)
+
+
+### Build System
+
+* **deps:** Bump actions/checkout from 4 to 6 ([#1](https://github.com/oh-namgyu/pub-project-auditor/issues/1)) ([081cedb](https://github.com/oh-namgyu/pub-project-auditor/commit/081cedb9c16b1ffeaf5b3b07afa57fb47fa2ba5e))
+* **deps:** Bump actions/setup-python from 5 to 7 ([#2](https://github.com/oh-namgyu/pub-project-auditor/issues/2)) ([3c07207](https://github.com/oh-namgyu/pub-project-auditor/commit/3c072079e722952beb5cb8c965829a66fe423c4b))
+* **deps:** Bump docker/build-push-action from 6 to 7 ([#3](https://github.com/oh-namgyu/pub-project-auditor/issues/3)) ([13d0a65](https://github.com/oh-namgyu/pub-project-auditor/commit/13d0a6505fa0d9493f2574d83a0802d9bb58d736))
+* **deps:** Bump docker/login-action from 3 to 4 ([#5](https://github.com/oh-namgyu/pub-project-auditor/issues/5)) ([0c475be](https://github.com/oh-namgyu/pub-project-auditor/commit/0c475beab5a555bc4794d875cbab33ea601cc357))
+* **deps:** Bump googleapis/release-please-action from 4 to 5 ([#4](https://github.com/oh-namgyu/pub-project-auditor/issues/4)) ([cfd5011](https://github.com/oh-namgyu/pub-project-auditor/commit/cfd50113a0609ecaf6422a6dea1d15207fa8b7a9))
+
 ## v0.1.0 — 2026-05-13
 
 - Initial public release.
