@@ -41,6 +41,13 @@ All notable changes to pub-project-auditor.
 - **`runner.py` switched from `subprocess.run` to `subprocess.Popen` + `communicate(timeout=)`** so the job worker can grab the proc handle (via the new `on_proc_start` hook) and SIGTERM it. Negative `returncode` or `130` (SIGINT) map to `error="cancelled"` for a clear UI signal.
 - **README "Trust boundary" subsection** spells out that audited repos are untrusted input, prompt-injection is in scope, and prompts (including target-repo excerpts) flow upstream to Anthropic's API.
 
+## [0.1.2](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.1...v0.1.2) (2026-08-25)
+
+
+### Continuous Integration
+
+* auto-merge dependabot patch/minor updates after checks pass ([36d9cf1](https://github.com/oh-namgyu/pub-project-auditor/commit/36d9cf180d44b5ff344e8214476b954fd512ea11))
+
 ## [0.1.1](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.0...v0.1.1) (2026-08-25)
 
 
