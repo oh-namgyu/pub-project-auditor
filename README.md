@@ -1,5 +1,7 @@
 # pub-project-auditor
 
+> **한글 요약** — 로컬 Git 저장소 폴더 전체를 Claude Code CLI로 일괄 감사하는 도구입니다. *(전체 한국어 문서: [README_KOR.md](README_KOR.md))*
+
 **[🇰🇷 한국어 README](README_KOR.md)**
 
 > Audit every Git repo on your laptop with Claude Code — in one command.
