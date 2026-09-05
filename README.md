@@ -1,5 +1,9 @@
 # pub-project-auditor
 
+[![CI](https://github.com/oh-namgyu/pub-project-auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/oh-namgyu/pub-project-auditor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![status](https://img.shields.io/badge/python-3.9%2B-blue)
+
 > **한글 요약** — 로컬 Git 저장소 폴더 전체를 Claude Code CLI로 일괄 감사하는 도구입니다. *(전체 한국어 문서: [README_KOR.md](README_KOR.md))*
 
 **[🇰🇷 한국어 README](README_KOR.md)**
@@ -11,8 +15,6 @@ AI-powered **code review** and **security audits** on each one, then renders
 the Markdown reports in a tiny web dashboard.
 
 Built on top of the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI.
-
-![status](https://img.shields.io/badge/python-3.9%2B-blue) ![status](https://img.shields.io/badge/license-MIT-green)
 
 ![dashboard](docs/screenshot.png)
 
@@ -217,4 +219,4 @@ snippets.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
