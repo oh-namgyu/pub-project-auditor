@@ -6,6 +6,13 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  # Tags pushed by release-please (GITHUB_TOKEN) never trigger the `tags`
+  # filter above, so release-please dispatches this with the new tag instead.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, e.g. v1.2.3"
+        required: true
 
 permissions:
   contents: read
@@ -16,7 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Validate dispatched tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::not a release tag: $TAG"; exit 1; }'
+
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: docker/setup-buildx-action@v4
 
@@ -33,12 +48,14 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
+          # A dispatch runs from main but builds an older tag, so branch/sha
+          # tags are off for it — they would repoint :main at the release.
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ github.event_name != 'workflow_dispatch' }}
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+            type=sha,enable=${{ github.event_name != 'workflow_dispatch' }}
 
       - name: Build (and push on main / tags)
         uses: docker/build-push-action@v7

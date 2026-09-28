@@ -7,12 +7,14 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           # Each main push opens (or updates) a release PR collecting the
           # conventional-commit messages since the last release; merging the
@@ -20,3 +22,12 @@ jobs:
           # CHANGELOG.md, and publishes a GitHub Release.
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # The release tag is created with GITHUB_TOKEN, which cannot trigger
+      # docker.yml's tag filter; workflow_dispatch is the allowed exception.
+      - name: Build the versioned image
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run docker.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG"
