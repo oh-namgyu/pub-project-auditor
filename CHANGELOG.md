@@ -41,6 +41,22 @@ All notable changes to pub-project-auditor.
 - **`runner.py` switched from `subprocess.run` to `subprocess.Popen` + `communicate(timeout=)`** so the job worker can grab the proc handle (via the new `on_proc_start` hook) and SIGTERM it. Negative `returncode` or `130` (SIGINT) map to `error="cancelled"` for a clear UI signal.
 - **README "Trust boundary" subsection** spells out that audited repos are untrusted input, prompt-injection is in scope, and prompts (including target-repo excerpts) flow upstream to Anthropic's API.
 
+## [0.1.3](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.2...v0.1.3) (2026-09-28)
+
+
+### Documentation
+
+* add Korean summary at the top of README ([b9ce167](https://github.com/oh-namgyu/pub-project-auditor/commit/b9ce167b4d8877429517e2616098e1ef3a7c283b))
+* standardize README header and License section ([90170c4](https://github.com/oh-namgyu/pub-project-auditor/commit/90170c408d78141c189f64d37ffe75d3d935bc38))
+
+
+### Build System
+
+* **deps:** Bump actions/checkout from 6 to 7 ([#11](https://github.com/oh-namgyu/pub-project-auditor/issues/11)) ([13d5aa1](https://github.com/oh-namgyu/pub-project-auditor/commit/13d5aa13ff0e1beb5ae3fcf84e2209a4846b7e50))
+* **deps:** Bump dependabot/fetch-metadata from 2 to 3 ([#10](https://github.com/oh-namgyu/pub-project-auditor/issues/10)) ([8d2f277](https://github.com/oh-namgyu/pub-project-auditor/commit/8d2f2772b7146438aa066ef5ab6b5d942d25fbd5))
+* **deps:** Bump docker/metadata-action from 5 to 6 ([#9](https://github.com/oh-namgyu/pub-project-auditor/issues/9)) ([07ee93a](https://github.com/oh-namgyu/pub-project-auditor/commit/07ee93a66d32ecd4585583ad7c0b0f6e95c93c69))
+* **deps:** Bump docker/setup-buildx-action from 3 to 4 ([#8](https://github.com/oh-namgyu/pub-project-auditor/issues/8)) ([c4a69d9](https://github.com/oh-namgyu/pub-project-auditor/commit/c4a69d93ed2e801d5aa7318d86a969dce53fd2d8))
+
 ## [0.1.2](https://github.com/oh-namgyu/pub-project-auditor/compare/v0.1.1...v0.1.2) (2026-08-25)
 
 
